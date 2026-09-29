@@ -1,0 +1,67 @@
+const FOLDERS = {
+  ricevute: '1cL3mKyAQ1hIy5vbNoAU4XRsp1Y36PXOW',
+  documenti: '149dKPSzhixT8N3BBGZ6nAoDEo1Gvlc3J',
+  backup: '1Fot0L1qSSZFV0UbO7s78Pv74ztFaLo5k'
+};
+
+function doPost(e) {
+  try {
+    const body = JSON.parse(e.postData.contents || '{}');
+    const secretCorretto = PropertiesService.getScriptProperties().getProperty('ACS_UPLOAD_SECRET');
+
+    if (!secretCorretto || body.secret !== secretCorretto) {
+      return risposta_({ ok: false, errore: 'Non autorizzato' });
+    }
+
+    if (body.action === 'uploadFile') {
+      return risposta_(uploadFile_(body));
+    }
+
+    if (body.action === 'sendEmail') {
+      return risposta_(sendEmail_(body));
+    }
+
+    return risposta_({ ok: false, errore: 'Azione non valida' });
+  } catch (err) {
+    return risposta_({ ok: false, errore: err.message });
+  }
+}
+
+function uploadFile_(body) {
+  const tipo = String(body.tipo || '').toLowerCase();
+  if (!FOLDERS[tipo]) return { ok: false, errore: 'Cartella non valida' };
+  if (!body.fileBase64) return { ok: false, errore: 'File mancante' };
+
+  const mimeType = body.mimeType || 'application/octet-stream';
+  const nomeFile = pulisciNomeFile_(body.nomeFile || 'documento');
+  const base64 = String(body.fileBase64).replace(/^data:[^;]+;base64,/, '');
+  const bytes = Utilities.base64Decode(base64);
+  const blob = Utilities.newBlob(bytes, mimeType, nomeFile);
+  const folder = DriveApp.getFolderById(FOLDERS[tipo]);
+  const file = folder.createFile(blob);
+
+  return { ok: true, fileId: file.getId(), nome: file.getName(), url: file.getUrl(), tipo: tipo };
+}
+
+function sendEmail_(body) {
+  const to = String(body.to || '').trim();
+  const subject = String(body.subject || '').trim();
+  const testo = String(body.body || '');
+  if (!to || !subject) return { ok: false, errore: 'Destinatario o oggetto mancanti' };
+
+  MailApp.sendEmail({
+    to: to,
+    subject: subject,
+    body: testo,
+    name: 'Associazione Cani Salvataggio'
+  });
+  return { ok: true };
+}
+
+function pulisciNomeFile_(nome) {
+  return String(nome).replace(/[\\/:*?"<>|]/g, '_').trim();
+}
+
+function risposta_(dati) {
+  return ContentService.createTextOutput(JSON.stringify(dati)).setMimeType(ContentService.MimeType.JSON);
+}

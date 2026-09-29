@@ -887,7 +887,7 @@ function DogAvatar({ size = 52, bg = COLORS.navy, iconColor = "#3ECB6E" }) {
   );
 }
 
-function AnagraficaCard({ c, onUpdate, onDelete, storico, storicoLezioni = [], onAddStorico, carnetTipi, acquistiCane, onRegistraAcquisto, puoModificare = true }) {
+function AnagraficaCard({ c, onUpdate, onDelete, storico, storicoLezioni = [], onAddStorico, carnetTipi, acquistiCane, onRegistraAcquisto, puoModificare = true, mostraEconomico = true }) {
   const [aperto, setAperto] = useState(false);
   const [modifica, setModifica] = useState(false);
   const [bozza, setBozza] = useState(c);
@@ -916,7 +916,7 @@ function AnagraficaCard({ c, onUpdate, onDelete, storico, storicoLezioni = [], o
           <div className="text-[12px] text-slate-500">{c.conduttore} · {c.razza}</div>
         </div>
         <div className="text-right">
-          <div className="text-[11px] font-mono" style={{ color: COLORS.muted }}>{c.lezioniResidue}/{c.lezioniTotali} lez.</div>
+          {mostraEconomico && <div className="text-[11px] font-mono" style={{ color: COLORS.muted }}>{c.lezioniResidue}/{c.lezioniTotali} lez.</div>}
           <ChevronDown size={18} color={COLORS.muted} className="ml-auto mt-1" style={{ transform: aperto ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
         </div>
       </button>
@@ -1041,6 +1041,7 @@ function AnagraficaCard({ c, onUpdate, onDelete, storico, storicoLezioni = [], o
             )}
           </div>
 
+          {mostraEconomico && (<>
           {/* Quota associativa */}
           <div>
             <SectionLabel>Quota associativa</SectionLabel>
@@ -1107,6 +1108,7 @@ function AnagraficaCard({ c, onUpdate, onDelete, storico, storicoLezioni = [], o
               </div>
             )}
           </div>
+          </>)}
 
           {/* Storico lezioni e movimenti carnet */}
           <div>
@@ -1121,11 +1123,11 @@ function AnagraficaCard({ c, onUpdate, onDelete, storico, storicoLezioni = [], o
                       <div className="text-[12px] font-semibold" style={{ color: COLORS.navy }}>{formatData(l.data)}{l.ora ? ` · ${l.ora}` : ""} — {l.tipo}</div>
                       <span className="text-[10.5px] font-semibold uppercase" style={{ color: l.stato === "annullata" ? COLORS.red : l.stato === "presente" ? COLORS.green : COLORS.muted }}>{l.stato}</span>
                     </div>
-                    {Number.isFinite(l.carnetPrima) && Number.isFinite(l.carnetDopo) && (l.carnetPrima || l.carnetDopo || l.movimentoCarnet) ? (
+                    {mostraEconomico && (Number.isFinite(l.carnetPrima) && Number.isFinite(l.carnetDopo) && (l.carnetPrima || l.carnetDopo || l.movimentoCarnet) ? (
                       <div className="text-[11px] mt-1 font-mono" style={{ color: COLORS.muted }}>Carnet: {l.carnetPrima} → {l.carnetDopo} {l.movimentoCarnet > 0 ? "(lezione restituita)" : l.movimentoCarnet < 0 ? "(lezione utilizzata)" : ""}</div>
                     ) : (
                       <div className="text-[11px] mt-1" style={{ color: COLORS.muted }}>Nessun movimento carnet registrato.</div>
-                    )}
+                    ))}
                   </div>
                 ))}
               </div>
@@ -1219,7 +1221,7 @@ function formatData(iso) {
 
 /* ---------- Vista Istruttore ---------- */
 
-function EventoCard({ slot, iscrizioni, daConfermare, anagrafica, onConfermaPresenza, onAnnullaIscrizione, onDelete, puoModificare = true }) {
+function EventoCard({ slot, iscrizioni, daConfermare, anagrafica, onConfermaPresenza, onAnnullaIscrizione, onDelete, puoModificare = true, puoConfermare = true, mostraResidui = true }) {
   const [aperto, setAperto] = useState(false);
   const style = getTipoStyle(slot.tipo);
   const pieni = slot.postiOccupati >= slot.postiTotali;
@@ -1268,10 +1270,10 @@ function EventoCard({ slot, iscrizioni, daConfermare, anagrafica, onConfermaPres
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     {p.stato === "presente" ? (
-                      <span className="text-[10.5px] font-mono px-2 py-1 rounded-full flex items-center gap-1" style={{ background: "#E7F6EC", color: COLORS.green }} title={`Presente · ${caneInfo ? caneInfo.lezioniResidue : "–"} lezioni rimanenti`}>
-                        <CheckCircle2 size={12} /> {caneInfo ? caneInfo.lezioniResidue : "–"} lez.
+                      <span className="text-[10.5px] font-mono px-2 py-1 rounded-full flex items-center gap-1" style={{ background: "#E7F6EC", color: COLORS.green }} title={mostraResidui ? `Presente · ${caneInfo ? caneInfo.lezioniResidue : "–"} lezioni rimanenti` : "Presente"}>
+                        <CheckCircle2 size={12} /> {mostraResidui ? `${caneInfo ? caneInfo.lezioniResidue : "–"} lez.` : "Presente"}
                       </span>
-                    ) : puoModificare ? (
+                    ) : puoConfermare ? (
                       <button
                         onClick={() => onConfermaPresenza(p.id, p.cane)}
                         title="Conferma presenza"
@@ -1394,7 +1396,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
   const [storico, setStorico] = useState(MOCK_STORICO);
   const [istruttori, setIstruttori] = useState([]);
   const [nuovoIstruttore, setNuovoIstruttore] = useState(false);
-  const [formIstruttore, setFormIstruttore] = useState({ nome: "", username: "", password: "", ruolo: "lettura" });
+  const [formIstruttore, setFormIstruttore] = useState({ nome: "", username: "", password: "", ruolo: "istruttore" });
   const [log, setLog] = useState([]);
   const [corsi, setCorsi] = useState([]);
   const [iscrizioni, setIscrizioni] = useState([]);
@@ -1423,7 +1425,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
 
         setIstruttoreLoggato(profilo);
         setAuth(true);
-        await caricaTuttoDopoLogin();
+        await caricaTuttoDopoLogin(profilo);
       } catch (err) {
         console.error("Ripristino sessione ACS fallito:", err);
       }
@@ -1451,32 +1453,52 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
       .then(({ error }) => { if (error) console.error("Errore log Supabase:", error); });
   }
 
-  async function caricaTuttoDopoLogin() {
+  async function caricaTuttoDopoLogin(profiloOverride = null) {
     segnalaAttivita(1);
     try {
-      const [
-        anagraficaRes, prenotazioniRes, carnetRes, corsiRes, acquistiRes,
-        impostazioniRes, utentiRes, iscrizioniRes, storicoRes
-      ] = await Promise.all([
+      const ruolo = String(profiloOverride?.ruolo || istruttoreLoggato?.ruolo || "").toLowerCase();
+      const admin = ruolo === "admin";
+
+      const richiesteBase = [
         supabase.from("anagrafica").select("*"),
         supabase.from("prenotazioni").select("*").order("created_at", { ascending: false }),
-        supabase.from("carnet").select("*").eq("attivo", true),
-        supabase.from("corsi").select("*").eq("attivo", true),
-        supabase.from("acquisti").select("*").order("data_acquisto", { ascending: false }),
-        supabase.from("impostazioni").select("chiave,valore").eq("chiave", "quota_associativa").maybeSingle(),
         supabase.from("istruttori").select("nome,username,ruolo,attivo").order("nome"),
-        supabase.from("iscrizioni").select("*").order("created_at", { ascending: false }),
         supabase.from("storico_addestramento").select("*").order("data", { ascending: false }),
-      ]);
+      ];
+      const [anagraficaRes, prenotazioniRes, utentiRes, storicoRes] = await Promise.all(richiesteBase);
+      const base = [anagraficaRes, prenotazioniRes, utentiRes, storicoRes];
+      const erroreBase = base.find((r) => r.error)?.error;
+      if (erroreBase) throw erroreBase;
 
-      const tutte = [anagraficaRes, prenotazioniRes, carnetRes, corsiRes, acquistiRes, impostazioniRes, utentiRes, iscrizioniRes, storicoRes];
-      const primoErrore = tutte.find((r) => r.error)?.error;
-      if (primoErrore) throw primoErrore;
-
-      const acquistiMappati = (acquistiRes.data || []).map(mappaAcquisto);
-      setAcquisti(acquistiMappati);
+      let acquistiMappati = [];
+      if (admin) {
+        const [carnetRes, corsiRes, acquistiRes, impostazioniRes, iscrizioniRes] = await Promise.all([
+          supabase.from("carnet").select("*").eq("attivo", true),
+          supabase.from("corsi").select("*").eq("attivo", true),
+          supabase.from("acquisti").select("*").order("data_acquisto", { ascending: false }),
+          supabase.from("impostazioni").select("chiave,valore").eq("chiave", "quota_associativa").maybeSingle(),
+          supabase.from("iscrizioni").select("*").order("created_at", { ascending: false }),
+        ]);
+        const adminResults = [carnetRes, corsiRes, acquistiRes, impostazioniRes, iscrizioniRes];
+        const erroreAdmin = adminResults.find((r) => r.error)?.error;
+        if (erroreAdmin) throw erroreAdmin;
+        acquistiMappati = (acquistiRes.data || []).map(mappaAcquisto);
+        setAcquisti(acquistiMappati);
+        setCarnetTipi((carnetRes.data || []).map(mappaCarnet));
+        setCorsi(corsiRes.data || []);
+        setIscrizioni(iscrizioniRes.data || []);
+        const quota = impostazioniRes.data?.valore;
+        const quotaNumero = typeof quota === "number" ? quota : Number(quota);
+        if (Number.isFinite(quotaNumero)) setQuotaAssociativa(quotaNumero);
+      } else {
+        setAcquisti([]);
+        setCarnetTipi([]);
+        setCorsi([]);
+        setIscrizioni([]);
+      }
 
       setAnagrafica((anagraficaRes.data || []).map(mappaCane).map((c) => {
+        if (!admin) return { ...c, lezioniResidue: 0, lezioniTotali: 0 };
         const suoiAcquisti = acquistiMappati.filter((a) => a.cane === c.cane);
         return {
           ...c,
@@ -1485,20 +1507,13 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
         };
       }));
       setPrenotazioni((prenotazioniRes.data || []).map(mappaPrenotazione));
-      setCarnetTipi((carnetRes.data || []).map(mappaCarnet));
-      setCorsi(corsiRes.data || []);
       setIstruttori(utentiRes.data || []);
-      setIscrizioni(iscrizioniRes.data || []);
       const storicoPerCane = {};
       for (const r of (storicoRes.data || [])) {
         if (!storicoPerCane[r.cane_nome]) storicoPerCane[r.cane_nome] = [];
         storicoPerCane[r.cane_nome].push({ id: r.id, data: r.data, obiettivi: r.obiettivi || "", note: r.note || "", istruttore: r.istruttore || "" });
       }
       setStorico(storicoPerCane);
-
-      const quota = impostazioniRes.data?.valore;
-      const quotaNumero = typeof quota === "number" ? quota : Number(quota);
-      if (Number.isFinite(quotaNumero)) setQuotaAssociativa(quotaNumero);
     } catch (err) {
       console.error("Errore caricamento Supabase:", err);
       setErroreMessaggio(err?.message || "Errore durante il caricamento dati da Supabase.");
@@ -1568,7 +1583,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
       setIstruttoreLoggato(profilo);
       setAuth(true);
       registraLog(profilo.nome, "accesso", "Utente", `${profilo.nome} ha effettuato l'accesso`);
-      await caricaTuttoDopoLogin();
+      await caricaTuttoDopoLogin(profilo);
     } catch (err) {
       await supabase.auth.signOut();
       setErroreMessaggio(err?.message || "Username o password non corretti.");
@@ -1607,18 +1622,25 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
   }
 
   const isAdmin = istruttoreLoggato.ruolo === "admin";
-  const puoModificare = istruttoreLoggato.ruolo !== "lettura";
+  const isIstruttore = istruttoreLoggato.ruolo === "istruttore";
+  const puoModificare = isAdmin;
+  const puoConfermarePresenza = isAdmin || isIstruttore;
 
   const iscrizioniInAttesa = iscrizioni.filter((i) => String(i.stato || "").toLowerCase().includes("attesa"));
   const iscrizioniChiuse = iscrizioni.filter((i) => !String(i.stato || "").toLowerCase().includes("attesa"));
 
-  const tabs = [
+  const tabs = isAdmin ? [
     { key: "anagrafica", label: "🐾 Anagrafica" },
     { key: "lezioni", label: "🦮 Lezioni" },
     { key: "impostazioni", label: iscrizioniInAttesa.length > 0 ? `⚙️ Setup (${iscrizioniInAttesa.length})` : "⚙️ Setup" },
+  ] : [
+    { key: "anagrafica", label: "🐾 Utenti / Cani" },
+    { key: "lezioni", label: "🦮 Presenze" },
+    { key: "utenti", label: "👤 Utenti" },
   ];
 
   async function approvaIscrizione(isc) {
+    if (!isAdmin) return;
     if (!window.confirm(`Approvare l'iscrizione di ${isc.nome} ${isc.cognome} (${isc.cane_nome}) al corso "${isc.corso_selezionato}"?\n\nVerranno creati automaticamente la scheda in Anagrafica e il carnet.`)) return;
     try {
       const { data: risposta, error } = await supabase.rpc("acs_approva_iscrizione", { p_iscrizione_id: isc.id });
@@ -1640,6 +1662,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
 
 
   async function rifiutaIscrizione(isc) {
+    if (!isAdmin) return;
     try {
       const { data: risposta, error } = await supabase.rpc("acs_rifiuta_iscrizione", {
         p_iscrizione_id: isc.id,
@@ -1664,6 +1687,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
 
 
   async function salvaCorso() {
+    if (!isAdmin) return;
     if (!formCorso.nome.trim() || !(Number(formCorso.numeroLezioni) > 0)) {
       alert("Inserisci almeno il nome del corso e il numero di lezioni.");
       return;
@@ -1688,6 +1712,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
 
 
   async function aggiungiStorico(caneNome, voce) {
+    if (!isAdmin) return;
     try {
       const { data, error } = await supabase.from("storico_addestramento").insert({
         cane_nome: caneNome,
@@ -1708,6 +1733,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
 
 
   async function confermaPresenza(prenotazioneId, caneNome) {
+    if (!puoConfermarePresenza) return;
     try {
       const { data: risposta, error } = await supabase.rpc("acs_conferma_presenza", { p_prenotazione_id: prenotazioneId });
       if (error) throw error;
@@ -1720,6 +1746,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
 
 
   async function annullaIscrizione(prenotazione) {
+    if (!isAdmin) return;
     try {
       const { data: risposta, error } = await supabase.rpc("acs_annulla_prenotazione", { p_prenotazione_id: prenotazione.id });
       if (error) throw error;
@@ -1732,6 +1759,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
 
 
   async function approvaRichiesta(richiesta) {
+    if (!isAdmin) return;
     try {
       const { data: risposta, error } = await supabase.rpc("acs_approva_richiesta", { p_prenotazione_id: richiesta.id });
       if (error) throw error;
@@ -1744,6 +1772,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
 
 
   async function rifiutaRichiesta(richiesta) {
+    if (!isAdmin) return;
     try {
       const { data: risposta, error } = await supabase.rpc("acs_rifiuta_richiesta", { p_prenotazione_id: richiesta.id });
       if (error) throw error;
@@ -1771,7 +1800,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
       if (!res.ok || !risposta.ok) throw new Error(risposta.errore || "Creazione utente fallita");
       setIstruttori((prev) => [...prev, risposta.profilo]);
       registraLog(istruttoreLoggato.nome, "creazione", "Utente", `Nuovo account: ${formIstruttore.nome} (${formIstruttore.username}, ruolo ${formIstruttore.ruolo})`);
-      setFormIstruttore({ nome: "", username: "", password: "", ruolo: "lettura" });
+      setFormIstruttore({ nome: "", username: "", password: "", ruolo: "istruttore" });
       setNuovoIstruttore(false);
     } catch (err) {
       alert(err?.message || "Non è stato possibile creare l'utente.");
@@ -1985,7 +2014,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
           Ciao, <b style={{ color: COLORS.navy }}>{istruttoreLoggato.nome}</b>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => caricaTuttoDopoLogin(istruttoreLoggato.username, pwd)} className="text-[11.5px] font-semibold flex items-center gap-1" style={{ color: COLORS.navy }}>
+          <button onClick={() => caricaTuttoDopoLogin(istruttoreLoggato)} className="text-[11.5px] font-semibold flex items-center gap-1" style={{ color: COLORS.navy }}>
             <RefreshCw size={13} /> Aggiorna
           </button>
           <button onClick={logout} className="text-[11.5px] font-semibold flex items-center gap-1" style={{ color: COLORS.muted }}>
@@ -2016,12 +2045,12 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
         const filtrati = anagrafica.filter((c) => {
           const matchTesto = !testo || c.cane.toLowerCase().includes(testo) || c.conduttore.toLowerCase().includes(testo);
           const haQuoteScadute = c.quotaAssociativa.stato === "da versare" || c.quotaCarnet.stato === "da versare";
-          const matchFiltro = filtroAnagrafica === "tutti" ? true : haQuoteScadute;
+          const matchFiltro = !isAdmin || filtroAnagrafica === "tutti" ? true : haQuoteScadute;
           return matchTesto && matchFiltro;
         });
         return (
           <div className="space-y-2">
-            <SectionLabel>🐾 Cani, conduttori e quote</SectionLabel>
+            <SectionLabel>{isAdmin ? "🐾 Cani, conduttori e quote" : "🐾 Cani e conduttori"}</SectionLabel>
 
             <div className="flex items-center gap-2 rounded-lg border px-3 py-2 mb-2.5" style={{ borderColor: "#E2E5E9" }}>
               <Search size={14} color={COLORS.muted} />
@@ -2033,7 +2062,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
               />
             </div>
 
-            <div className="flex gap-1.5 mb-3 overflow-x-auto pb-0.5">
+{isAdmin && (            <div className="flex gap-1.5 mb-3 overflow-x-auto pb-0.5">
               {[
                 { key: "tutti", label: "Tutti" },
                 { key: "scadute", label: "⚠️ Quote scadute" },
@@ -2051,6 +2080,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
                 </button>
               ))}
             </div>
+            )}
 
             {puoModificare && (
               nuovoCane ? (
@@ -2128,6 +2158,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
                   acquistiCane={acquisti.filter((a) => a.cane === c.cane).sort((x, y) => (y.data || "").localeCompare(x.data || ""))}
                   onRegistraAcquisto={(carnetId) => registraAcquisto(c.cane, carnetId)}
                   puoModificare={puoModificare}
+                  mostraEconomico={isAdmin}
                 />
               ))}
             </div>
@@ -2169,7 +2200,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
 
           {(() => {
             const richiesteSospese = prenotazioni.filter((p) => p.stato === "in sospeso");
-            if (richiesteSospese.length === 0) return null;
+            if (!isAdmin || richiesteSospese.length === 0) return null;
             return (
               <div className="rounded-xl p-3.5 mb-4 space-y-2.5" style={{ background: "#F3DDCE", border: `1.5px solid ${COLORS.terracotta}` }}>
                 <div className="text-[12.5px] font-bold flex items-center gap-1.5" style={{ color: "#8A4A28", fontFamily: "Oswald, sans-serif" }}>
@@ -2207,13 +2238,36 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
             {eventi.map((slot) => {
               const iscrizioni = prenotazioni.filter((p) => p.slotId === slot.id && p.stato !== "in sospeso" && p.stato !== "annullata");
               const daConfermare = iscrizioni.filter((p) => p.stato !== "presente").length;
-              return <EventoCard key={slot.id} slot={slot} iscrizioni={iscrizioni} daConfermare={daConfermare} anagrafica={anagrafica} onConfermaPresenza={confermaPresenza} onAnnullaIscrizione={annullaIscrizione} onDelete={() => eliminaEvento(slot.id)} puoModificare={puoModificare} />;
+              return <EventoCard key={slot.id} slot={slot} iscrizioni={iscrizioni} daConfermare={daConfermare} anagrafica={anagrafica} onConfermaPresenza={confermaPresenza} onAnnullaIscrizione={annullaIscrizione} onDelete={() => eliminaEvento(slot.id)} puoModificare={puoModificare} puoConfermare={puoConfermarePresenza} mostraResidui={isAdmin} />;
             })}
           </div>
         </div>
       )}
 
-      {tab === "impostazioni" && (
+      {tab === "utenti" && !isAdmin && (
+        <div className="space-y-3">
+          <SectionLabel>👤 Utenti ACS</SectionLabel>
+          <p className="text-[12px] text-slate-500">Elenco in sola visualizzazione.</p>
+          <div className="space-y-2">
+            {istruttori.filter((i) => i.attivo).map((i) => (
+              <div key={i.username} className="rounded-xl p-3 flex items-center gap-3" style={{ background: "#F5F6F8" }}>
+                <div className="w-9 h-9 rounded-full grid place-items-center shrink-0" style={{ background: COLORS.navy }}>
+                  <Users size={15} color="#3ECB6E" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-semibold truncate" style={{ color: COLORS.navy }}>{i.nome}</div>
+                  <div className="text-[11.5px] text-slate-500 truncate">@{i.username}</div>
+                </div>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full uppercase shrink-0" style={{ background: "#E7F6EC", color: COLORS.green }}>
+                  {i.ruolo === "admin" ? "Admin" : "Istruttore"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === "impostazioni" && isAdmin && (
         <div>
           {/* Sotto-navigazione: separa nettamente Utenti da Quote */}
           <div className="flex gap-2 mb-5">
@@ -2379,8 +2433,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
                   {istruttori.map((i) => {
                     const ruoloStile = {
                       admin: { color: COLORS.terracotta, label: "Admin" },
-                      modificatore: { color: COLORS.green, label: "Modificatore" },
-                      lettura: { color: COLORS.muted, label: "Lettura" },
+                      istruttore: { color: COLORS.green, label: "Istruttore" },
                     }[i.ruolo] || { color: COLORS.muted, label: i.ruolo };
                     return (
                       <div key={i.username} className="rounded-xl p-3 flex items-center gap-3" style={{ background: "#F5F6F8" }}>
@@ -2424,8 +2477,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
                           style={{ borderColor: "#E2E5E9" }}
                         >
                           <option value="admin">Admin — accesso completo</option>
-                          <option value="modificatore">Modificatore — gestisce i dati</option>
-                          <option value="lettura">Lettura — solo consultazione</option>
+                          <option value="istruttore">Istruttore — utenti e conferma presenze</option>
                         </select>
                       </label>
                       <div className="flex gap-3">

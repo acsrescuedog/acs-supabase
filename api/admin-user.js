@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     const nome = String(body.nome || '').trim();
     const username = String(body.username || '').trim().toLowerCase();
     const password = String(body.password || '');
-    const ruolo = ['admin','operatore','lettura'].includes(body.ruolo) ? body.ruolo : 'lettura';
+    const ruolo = ['admin','istruttore'].includes(body.ruolo) ? body.ruolo : 'istruttore';
     if (!nome || !username || password.length < 6) return json(res, 400, { ok: false, errore: 'Nome, username e password (minimo 6 caratteri) sono obbligatori' });
     if (!/^[a-z0-9._-]+$/.test(username)) return json(res, 400, { ok: false, errore: 'Username non valido' });
 

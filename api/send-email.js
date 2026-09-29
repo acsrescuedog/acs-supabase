@@ -82,7 +82,25 @@ export default async function handler(req, res) {
       .select('id,nome,cognome,email,corso_selezionato,stato,motivo_rifiuto')
       .eq('id', iscrizioneId)
       .maybeSingle();
-    if (iscrizioneError || !iscrizione) return risposta(res, 404, { ok: false, errore: 'Iscrizione non trovata' });
+    if (iscrizioneError) {
+  console.error('Errore lettura iscrizione:', iscrizioneError);
+
+  return risposta(res, 500, {
+    ok: false,
+    errore: 'Errore Supabase lettura iscrizione',
+    codice: iscrizioneError.code || null,
+    dettaglio: iscrizioneError.message || null,
+    iscrizioneId
+  });
+}
+
+if (!iscrizione) {
+  return risposta(res, 404, {
+    ok: false,
+    errore: 'Iscrizione non trovata',
+    iscrizioneId
+  });
+}
     if (!iscrizione.email) return risposta(res, 200, { ok: true, skipped: true, motivo: 'Email non presente' });
 
     const stato = String(iscrizione.stato || '').toLowerCase();

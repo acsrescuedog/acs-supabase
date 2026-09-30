@@ -1,0 +1,85 @@
+const FOLDERS = {
+  ricevute: '1cL3mKyAQ1hIy5vbNoAU4XRsp1Y36PXOW',
+  documenti: '149dKPSzhixT8N3BBGZ6nAoDEo1Gvlc3J',
+  backup: '1Fot0L1qSSZFV0UbO7s78Pv74ztFaLo5k'
+};
+
+function doPost(e) {
+  try {
+    const body = JSON.parse(e.postData.contents || '{}');
+    const secretCorretto = PropertiesService.getScriptProperties().getProperty('ACS_UPLOAD_SECRET');
+    if (!secretCorretto || body.secret !== secretCorretto) return risposta_({ ok:false, errore:'Non autorizzato' });
+    if (body.action === 'uploadFile') return risposta_(uploadFile_(body));
+    if (body.action === 'sendEmail') return risposta_(sendEmail_(body));
+    return risposta_({ ok:false, errore:'Azione non valida' });
+  } catch (err) {
+    return risposta_({ ok:false, errore:err.message });
+  }
+}
+
+function uploadFile_(body) {
+  const tipo = String(body.tipo || '').toLowerCase();
+  if (!FOLDERS[tipo]) return { ok:false, errore:'Cartella non valida' };
+  if (!body.fileBase64) return { ok:false, errore:'File mancante' };
+  const mimeType = body.mimeType || 'application/octet-stream';
+  const nomeFile = pulisciNomeFile_(body.nomeFile || 'documento');
+  const base64 = String(body.fileBase64).replace(/^data:[^;]+;base64,/, '');
+  const blob = Utilities.newBlob(Utilities.base64Decode(base64), mimeType, nomeFile);
+  const file = DriveApp.getFolderById(FOLDERS[tipo]).createFile(blob);
+  return { ok:true, fileId:file.getId(), nome:file.getName(), url:file.getUrl(), tipo:tipo };
+}
+
+function blobsDaBase64_(items) {
+  return (Array.isArray(items) ? items : []).map(function(item) {
+    return Utilities.newBlob(
+      Utilities.base64Decode(String(item.base64 || '')),
+      item.mimeType || 'application/octet-stream',
+      pulisciNomeFile_(item.name || 'allegato')
+    );
+  }).filter(function(blob) { return blob.getBytes().length > 0; });
+}
+
+function inlineImagesDaBase64_(items) {
+  const out = {};
+  (Array.isArray(items) ? items : []).forEach(function(item) {
+    const key = String(item.name || '').trim();
+    if (!key || !item.base64) return;
+    out[key] = Utilities.newBlob(
+      Utilities.base64Decode(String(item.base64)),
+      item.mimeType || 'image/png',
+      key
+    );
+  });
+  return out;
+}
+
+function sendEmail_(body) {
+  const to = String(body.to || '').trim();
+  const subject = String(body.subject || '').trim();
+  const testo = String(body.body || '');
+  if (!to || !subject) return { ok:false, errore:'Destinatario o oggetto mancanti' };
+
+  const opzioni = {
+    to: to,
+    subject: subject,
+    body: testo,
+    name: 'Associazione Cani Salvataggio'
+  };
+
+  if (body.htmlBody) opzioni.htmlBody = String(body.htmlBody);
+  const attachments = blobsDaBase64_(body.attachments);
+  if (attachments.length) opzioni.attachments = attachments;
+  const inlineImages = inlineImagesDaBase64_(body.inlineImages);
+  if (Object.keys(inlineImages).length) opzioni.inlineImages = inlineImages;
+
+  MailApp.sendEmail(opzioni);
+  return { ok:true };
+}
+
+function pulisciNomeFile_(nome) {
+  return String(nome).replace(/[\\/:*?"<>|]/g, '_').trim();
+}
+
+function risposta_(dati) {
+  return ContentService.createTextOutput(JSON.stringify(dati)).setMimeType(ContentService.MimeType.JSON);
+}

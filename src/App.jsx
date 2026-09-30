@@ -1633,6 +1633,17 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
     setPwd("");
   }
 
+  const ruoloCorrente = String(istruttoreLoggato?.ruolo || "").toLowerCase();
+
+  useEffect(() => {
+    if (!auth || ruoloCorrente !== "admin") return undefined;
+    const h = (e) => {
+      if (e?.detail?.id) attivaPacchetto(e.detail.id);
+    };
+    window.addEventListener("acs-attiva-pacchetto", h);
+    return () => window.removeEventListener("acs-attiva-pacchetto", h);
+  }, [auth, ruoloCorrente]);
+
   if (!auth) {
     return (
       <div className="max-w-md sm:max-w-2xl lg:max-w-5xl xl:max-w-6xl mx-auto px-4 py-14">
@@ -1653,8 +1664,8 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
     );
   }
 
-  const isAdmin = istruttoreLoggato.ruolo === "admin";
-  const isIstruttore = istruttoreLoggato.ruolo === "istruttore";
+  const isAdmin = ruoloCorrente === "admin";
+  const isIstruttore = ruoloCorrente === "istruttore";
   const puoModificare = isAdmin;
   const puoGestireAnagrafica = isAdmin || isIstruttore;
   const puoConfermarePresenza = isAdmin || isIstruttore;
@@ -1940,13 +1951,6 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
       alert(`Pacchetto attivato: ${risposta.lezioni_residue} ingressi disponibili.`);
     } catch (err) { alert(err?.message || "Errore durante l'attivazione del pacchetto."); }
   }
-
-  useEffect(() => {
-    const h = (e) => { if (e?.detail?.id) attivaPacchetto(e.detail.id); };
-    window.addEventListener('acs-attiva-pacchetto', h);
-    return () => window.removeEventListener('acs-attiva-pacchetto', h);
-  }, [isAdmin]);
-
 
   async function creaCane(e) {
     e.preventDefault();

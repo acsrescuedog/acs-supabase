@@ -69,11 +69,36 @@ async function generaModuloPersonalizzato({ origin, pacchetto, tipo, cane }) {
     page.drawText(value, { x, y: h - top, size, font, color: black });
   };
 
-  // Dati disponibili dall'anagrafica ACS.
-  drawTop(155, 190, pacchetto.cliente_nome, 9.5);
-  drawTop(363, 207, cane?.data_nascita_conduttore, 9);
-  drawTop(474, 253, pacchetto.cliente_telefono, 9);
-  drawTop(160, 268, pacchetto.cliente_email, 9);
+  // Scrive i dati sopra una riga pulita, evitando che il testo finisca
+  // sopra le etichette o sotto gli underscore del modulo originale.
+  const drawField = (x1, x2, lineTop, text, size = 9, font = normal) => {
+    const value = pdfSafe(text);
+    if (!value) return;
+    const lineY = h - lineTop;
+    page.drawRectangle({
+      x: x1 - 1,
+      y: lineY - 2,
+      width: (x2 - x1) + 2,
+      height: size + 7,
+      color: white,
+    });
+    page.drawLine({
+      start: { x: x1, y: lineY },
+      end: { x: x2, y: lineY },
+      thickness: 0.55,
+      color: black,
+    });
+    const maxWidth = Math.max(10, x2 - x1 - 4);
+    let finalSize = size;
+    while (finalSize > 7 && font.widthOfTextAtSize(value, finalSize) > maxWidth) finalSize -= 0.5;
+    page.drawText(value, { x: x1 + 2, y: lineY + 2, size: finalSize, font, color: black });
+  };
+
+  // Dati disponibili dall'anagrafica ACS, allineati esattamente alle righe del modulo.
+  drawField(152, 498, 188.5, pacchetto.cliente_nome, 9.5);
+  drawField(366, 468, 202.5, cane?.data_nascita_conduttore, 9);
+  drawField(444, 529, 244.5, pacchetto.cliente_telefono, 9);
+  drawField(198, 379, 258.5, pacchetto.cliente_email, 8.8);
 
   // Sostituisce il vecchio elenco fisso dei corsi con il pacchetto realmente assegnato.
   const areaTop = 270;
@@ -91,11 +116,11 @@ async function generaModuloPersonalizzato({ origin, pacchetto, tipo, cane }) {
   drawTop(79, 458, 'Data ____________________', 9);
   drawTop(310, 458, 'Firma ____________________________________', 9);
 
-  drawTop(95, 642, pacchetto.cane_nome, 9.5);
-  drawTop(350, 642, cane?.razza, 9.5);
-  drawTop(127, 659, cane?.data_nascita_cane, 9);
-  drawTop(491, 659, cane?.sesso, 9);
-  drawTop(95, 680, cane?.microchip, 9);
+  drawField(90, 329, 648.5, pacchetto.cane_nome, 9.5);
+  drawField(354, 530, 648.5, cane?.razza, 9.5);
+  drawField(128, 314, 662.5, cane?.data_nascita_cane, 9);
+  drawField(476, 529, 662.5, cane?.sesso, 9);
+  drawField(108, 432, 684.5, cane?.microchip, 9);
 
   const bytes = await pdfDoc.save();
   return Buffer.from(bytes).toString('base64');
@@ -218,7 +243,7 @@ export default async function handler(req, res) {
         mimeType: 'application/pdf',
         base64: pdfBase64,
       }],
-      inlineImages: logoBase64 ? [{ name:'acslogo', mimeType:'image/png', base64:logoBase64 }] : [],
+      inlineImages: logoBase64 ? [{ cid:'acslogo', name:'acslogo.png', mimeType:'image/png', base64:logoBase64 }] : [],
     };
 
     const rr = await fetch(RELAY_URL, {

@@ -71,7 +71,7 @@ export default async function handler(req, res) {
     const logo = await fetchLogo(origin);
     const logoSrc = logo ? 'cid:acslogo' : `${origin}/icon-192.png`;
     const htmlBody = `<div style="font-family:Arial,sans-serif;color:#172033;line-height:1.55;max-width:640px;margin:auto"><p>${msg.intro}</p><p>${msg.contenuto}</p><div style="text-align:center;margin-top:32px;padding-top:20px;border-top:1px solid #e5e7eb"><img src="${logoSrc}" alt="ACS" width="84" height="84" style="display:block;margin:0 auto 8px auto;width:84px;height:84px;object-fit:contain"><div style="font-weight:700;color:#173650">Associazione Cani Salvataggio</div></div></div>`;
-    const relayResponse = await fetch(RELAY_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({secret:RELAY_SECRET,action:'sendEmail',to:iscrizione.email,subject:msg.subject,body:msg.body,htmlBody,inlineImages:logo?[{name:'acslogo',mimeType:'image/png',base64:logo}]:[]}),redirect:'follow'});
+    const relayResponse = await fetch(RELAY_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({secret:RELAY_SECRET,action:'sendEmail',to:iscrizione.email,subject:msg.subject,body:msg.body,htmlBody,inlineImages:logo?[{cid:'acslogo',name:'acslogo.png',mimeType:'image/png',base64:logo}]:[]}),redirect:'follow'});
     const testo = await relayResponse.text(); let relayData=null; try{relayData=JSON.parse(testo)}catch{}
     if (!relayResponse.ok || !relayData?.ok) {
       await admin.from('email_eventi').delete().eq('iscrizione_id',iscrizioneId).eq('tipo',tipo);

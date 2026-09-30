@@ -23,6 +23,7 @@ export default async function handler(req, res) {
     const fileBase64 = String(body.fileBase64 || '');
     const nomeFile = String(body.nomeFile || 'ricevuta').slice(0, 180);
     const mimeType = String(body.mimeType || '');
+    const tipo = ['ricevute','documenti'].includes(String(body.tipo || '').toLowerCase()) ? String(body.tipo).toLowerCase() : 'ricevute';
 
     if (!fileBase64 || !mimeType || !MIME_CONSENTITI.has(mimeType)) {
       return res.status(400).json({ ok: false, errore: 'File o formato non valido' });
@@ -40,7 +41,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         secret,
         action: 'uploadFile',
-        tipo: 'ricevute',
+        tipo,
         nomeFile,
         mimeType,
         fileBase64,

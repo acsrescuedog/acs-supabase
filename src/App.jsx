@@ -43,6 +43,21 @@ async function inviaEmailIscrizione(tipo, iscrizioneId, richiedeSessione = false
   return dati;
 }
 
+
+async function inviaEmailPacchetto(acquistoId) {
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  if (!token) throw new Error('Sessione non disponibile');
+  const r = await fetch('/api/send-package-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ acquistoId }),
+  });
+  const dati = await r.json().catch(() => ({}));
+  if (!r.ok || !dati?.ok) throw new Error(dati?.errore || 'Comunicazione pacchetto non inviata');
+  return dati;
+}
+
 // Il backend restituisce le righe del foglio con i nomi delle colonne
 // (snake_case): queste funzioni le convertono nella forma usata dal frontend.
 function mappaEvento(r) {
@@ -64,7 +79,7 @@ function mappaCane(r) {
     // per ora restano solo visualizzate/modificate lato app, senza persistere.
     lezioniResidue: 0, lezioniTotali: 0,
     quotaAssociativa: { importo: 0, versato: 0, scadenza: "", stato: "da versare" },
-    quotaCarnet: { importo: 0, versato: 0, scadenza: "", stato: "da versare" },
+    quotaPacchetto: { importo: 0, versato: 0, scadenza: "", stato: "da versare" },
   };
 }
 
@@ -74,7 +89,7 @@ function mappaPrenotazione(r) {
     email: r.cliente_email || "", telefono: r.cliente_telefono, stato: r.stato, confermatoDa: r.confermato_da,
     annullatoDa: r.annullato_da || "", dataAnnullamento: r.data_annullamento || "",
     dataPrenotazione: r.data_prenotazione || "", acquistoId: r.acquisto_id || "",
-    carnetPrima: Number(r.carnet_prima), carnetDopo: Number(r.carnet_dopo), movimentoCarnet: Number(r.movimento_carnet) || 0,
+    carnetPrima: Number(r.carnet_prima), carnetDopo: Number(r.carnet_dopo), movimentoPacchetto: Number(r.movimento_carnet) || 0,
     creditoRestituito: r.credito_restituito === true,
     nuovo: r.stato === "in sospeso",
     razza: r.razza || "", eta: r.eta || "", sesso: r.sesso || "", sterilizzato: r.sterilizzato || "",
@@ -91,6 +106,10 @@ function mappaAcquisto(r) {
   return {
     id: r.id, cane: r.cane_nome, carnetId: r.carnet_id, data: r.data_acquisto,
     lezioniTotali: Number(r.lezioni_totali) || 0, lezioniResidue: Number(r.lezioni_residue) || 0,
+    numeroPacchetto: r.numero_pacchetto || null,
+    statoPacchetto: r.stato_pacchetto || (r.pagato ? 'attivo' : 'assegnato'),
+    documentoUrl: r.documento_url || '', bonificoUrl: r.bonifico_url || '',
+    adesioneAccettata: r.adesione_accettata === true,
   };
 }
 
@@ -128,14 +147,14 @@ const MOCK_ANAGRAFICA = [
     specializzazione: "Ricerca macerie", lezioniResidue: 6, lezioniTotali: 10,
     conduttore: "Marco Villa", telefono: "333 1234567", email: "marco.villa@example.com",
     quotaAssociativa: { importo: 50, versato: 50, scadenza: "2027-01-31", stato: "in regola" },
-    quotaCarnet: { importo: 220, versato: 220, scadenza: "2026-09-30", stato: "in regola" },
+    quotaPacchetto: { importo: 220, versato: 220, scadenza: "2026-09-30", stato: "in regola" },
   },
   {
     cane: "Nina", microchip: "380260098765432", eta: "2 anni", razza: "Border Collie",
     specializzazione: "Obbedienza base", lezioniResidue: 1, lezioniTotali: 1,
     conduttore: "Elisa Conte", telefono: "347 7654321", email: "elisa.conte@example.com",
     quotaAssociativa: { importo: 50, versato: 0, scadenza: "2026-08-10", stato: "da versare" },
-    quotaCarnet: { importo: 25, versato: 25, scadenza: "2026-07-31", stato: "in regola" },
+    quotaPacchetto: { importo: 25, versato: 25, scadenza: "2026-07-31", stato: "in regola" },
   },
 ];
 
@@ -231,11 +250,12 @@ function Header({ role, setRole, onOpenInstall }) {
           <Smartphone size={18} color="#DCE7E9" />
         </button>
       </div>
-      <div className="max-w-md sm:max-w-2xl lg:max-w-5xl xl:max-w-6xl mx-auto px-4 pb-3 flex gap-2">
+      <div className="max-w-md sm:max-w-2xl lg:max-w-5xl xl:max-w-6xl mx-auto px-4 pb-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
         {[
-          { key: "cliente", label: "Lezioni", emoji: "🐶" },
-          { key: "iscrizione", label: "Iscrizione", emoji: "📝" },
-          { key: "istruttore", label: "Area istruttore", emoji: "🦮" },
+          { key: "prova", label: "Lezione di prova", emoji: "🐾" },
+          { key: "cliente", label: "Prenota lezione", emoji: "📅" },
+          { key: "verifica", label: "Verifica ingressi", emoji: "🎟️" },
+          { key: "istruttore", label: "Area Staff", emoji: "🔐" },
         ].map((t) => (
           <button
             key={t.key}
@@ -257,15 +277,17 @@ function Header({ role, setRole, onOpenInstall }) {
 
 /* ---------- Vista Cliente ---------- */
 
-function ClienteView({ prenotazioni, setPrenotazioni, eventi, setEventi, anagrafica, onAggiorna }) {
+function ClienteView({ prenotazioni, setPrenotazioni, eventi, setEventi, anagrafica, onAggiorna, modalita = "lezione" }) {
   const [prenotato, setPrenotato] = useState(null);
   const [riconosciuto, setRiconosciuto] = useState(null);
   const [inSospeso, setInSospeso] = useState(false);
   const [slotScelto, setSlotScelto] = useState(null);
-  const [form, setForm] = useState({ nome: "", telefono: "", cane: "", razza: "", eta: "", sesso: "", sterilizzato: "", motivoRichiesta: "", saluteTerapie: "", comportamento: "", microchip: "", consensoPrivacy: false, consensoFotoVideo: false });
+  const [form, setForm] = useState({ nome: "", email: "", telefono: "", cane: "", razza: "", eta: "", sesso: "", sterilizzato: "", motivoRichiesta: "", saluteTerapie: "", comportamento: "", microchip: "", consensoPrivacy: false, consensoFotoVideo: false });
   const [caneAperto, setCaneAperto] = useState(null);
   const [informativaAperta, setInformativaAperta] = useState(null);
   const [riconoscimento, setRiconoscimento] = useState({ stato: "vuoto", socio: false, ambiguo: false, metodo: "", lezioniResidue: null, lezioniDopo: null });
+  const prova = modalita === "prova";
+  const eventiVisibili = eventi.filter((e) => { const t = String(e.tipo || "").toLowerCase(); const eProva = t.includes("prova") || t.includes("prima lezione"); return prova ? eProva : !eProva; });
 
   function normalizza(s) {
     return String(s || "").trim().toLowerCase().replace(/\s+/g, "");
@@ -361,13 +383,21 @@ function ClienteView({ prenotazioni, setPrenotazioni, eventi, setEventi, anagraf
       alert("Sono state trovate più anagrafiche compatibili. Contatta la segreteria per verificare i dati prima di prenotare.");
       return;
     }
-    const match = riconoscimento.socio ? { riconosciuto: true } : null;
+    if (!prova && !riconoscimento.socio) {
+      alert("Per prenotare una lezione ordinaria devi essere già registrato e avere un pacchetto attivo. Se è la tua prima volta, prenota la lezione di prova.");
+      return;
+    }
+    if (!prova && Number(riconoscimento.lezioniResidue || 0) <= 0) {
+      alert("Non risultano ingressi disponibili sul tuo pacchetto. Contatta la segreteria.");
+      return;
+    }
+    const match = riconoscimento.socio ? { riconosciuto: true, cane: form.cane, lezioniResidue: riconoscimento.lezioniResidue } : null;
 
     try {
       const { data: risposta, error: prenError } = await supabase.rpc("crea_prenotazione_pubblica", {
         p_disponibilita_id: slotScelto.id,
         p_cliente_nome: form.nome,
-        p_cliente_email: "",
+        p_cliente_email: form.email,
         p_cliente_telefono: form.telefono,
         p_cane_nome: form.cane,
         p_consenso_privacy: form.consensoPrivacy,
@@ -391,29 +421,21 @@ function ClienteView({ prenotazioni, setPrenotazioni, eventi, setEventi, anagraf
 
       const id = risposta.id;
 
-      if (match) {
-        // Socio riconosciuto: la prenotazione occupa subito un posto reale
-        setPrenotazioni((prev) => [
-          ...prev,
-          { id, slotId: slotScelto.id, cliente: form.nome, cane: form.cane, telefono: form.telefono, stato: "in attesa" },
-        ]);
-        setEventi((prev) => prev.map((s) => (s.id === slotScelto.id ? { ...s, postiOccupati: s.postiOccupati + 1 } : s)));
-        setInSospeso(false);
-      } else {
-        // Nuovo utente non ancora in anagrafica: richiesta in sospeso, non occupa il posto
-        // finché l'istruttore non la approva (crea la scheda con razza/età fornite)
-        setPrenotazioni((prev) => [
-          ...prev,
-          { id, slotId: slotScelto.id, cliente: form.nome, cane: form.cane, telefono: form.telefono, stato: "in sospeso", nuovo: true, razza: form.razza, eta: form.eta, sesso: form.sesso, sterilizzato: form.sterilizzato,
-            motivoRichiesta: form.motivoRichiesta, saluteTerapie: form.saluteTerapie,
-            comportamento: form.comportamento, microchip: form.microchip },
-        ]);
-        setInSospeso(true);
-      }
+      const statoSalvato = risposta?.stato || "in attesa";
+      const occupaPosto = statoSalvato !== "in sospeso";
+      setPrenotazioni((prev) => [
+        ...prev,
+        { id, slotId: slotScelto.id, cliente: form.nome, cane: form.cane, telefono: form.telefono, stato: statoSalvato, nuovo: !match,
+          razza: form.razza, eta: form.eta, sesso: form.sesso, sterilizzato: form.sterilizzato,
+          motivoRichiesta: form.motivoRichiesta, saluteTerapie: form.saluteTerapie,
+          comportamento: form.comportamento, microchip: form.microchip },
+      ]);
+      if (occupaPosto) setEventi((prev) => prev.map((s) => (s.id === slotScelto.id ? { ...s, postiOccupati: s.postiOccupati + 1 } : s)));
+      setInSospeso(!occupaPosto);
       setRiconosciuto(match);
       setPrenotato(slotScelto);
       setSlotScelto(null);
-      setForm({ nome: "", telefono: "", cane: "", razza: "", eta: "", sesso: "", sterilizzato: "", motivoRichiesta: "", saluteTerapie: "", comportamento: "", microchip: "", consensoPrivacy: false, consensoFotoVideo: false });
+      setForm({ nome: "", email: "", telefono: "", cane: "", razza: "", eta: "", sesso: "", sterilizzato: "", motivoRichiesta: "", saluteTerapie: "", comportamento: "", microchip: "", consensoPrivacy: false, consensoFotoVideo: false });
     } catch (err) {
       alert("Impossibile contattare il server. Controlla la connessione e riprova.");
     }
@@ -448,7 +470,8 @@ function ClienteView({ prenotazioni, setPrenotazioni, eventi, setEventi, anagraf
           )}
         </div>
         <form onSubmit={prenota} className="space-y-3">
-          <Input label="Il tuo nome" value={form.nome} onChange={(v) => setForm({ ...form, nome: v })} required />
+          <Input label="Il tuo nome e cognome" value={form.nome} onChange={(v) => setForm({ ...form, nome: v })} required />
+          {prova && <Input label="Email" type="email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} required icon={<Mail size={14} />} />}
           <Input label="Telefono" value={form.telefono} onChange={(v) => setForm({ ...form, telefono: v })} required icon={<Phone size={14} />} />
           <Input label="Nome del cane" value={form.cane} onChange={(v) => setForm({ ...form, cane: v })} required icon={<PawPrint size={14} />} />
 
@@ -462,7 +485,7 @@ function ClienteView({ prenotazioni, setPrenotazioni, eventi, setEventi, anagraf
               <div className="flex items-center gap-2"><CheckCircle2 size={15} /> Scheda cliente riconosciuta.</div>
               {riconoscimento.lezioniResidue !== null && (
                 <div className="mt-1.5 pl-6 font-normal" style={{ color: COLORS.navy }}>
-                  Carnet attuale: <b>{riconoscimento.lezioniResidue}</b> lezioni. Dopo questa prenotazione resteranno <b>{Math.max(0, riconoscimento.lezioniDopo)}</b> lezioni disponibili.
+                  Pacchetto attivo: <b>{riconoscimento.lezioniResidue}</b> ingressi disponibili. La prenotazione non scala alcun ingresso: verrà scalato solo quando Admin o Istruttore confermeranno la presenza.
                 </div>
               )}
             </div>
@@ -473,8 +496,14 @@ function ClienteView({ prenotazioni, setPrenotazioni, eventi, setEventi, anagraf
               <span>Sono state trovate più anagrafiche compatibili. Contatta la segreteria per verificare i dati.</span>
             </div>
           )}
+          {!prova && campiBaseCompleti && riconoscimento.stato === "completato" && !riconoscimento.socio && !riconoscimento.ambiguo && (
+            <div className="rounded-xl px-3.5 py-2.5 text-[12px] font-semibold flex items-start gap-2" style={{ background: "#FDECEA", color: COLORS.red }}>
+              <AlertCircle size={15} className="mt-0.5 shrink-0" />
+              <span>Utente non riconosciuto o nessun pacchetto attivo. Se è la tua prima volta usa “Lezione di prova”.</span>
+            </div>
+          )}
 
-          {sembraNuovo && (
+          {prova && sembraNuovo && (
             <div className="rounded-xl p-3.5 space-y-3" style={{ background: "#F3DDCE" }}>
               <div className="text-[12px] font-semibold flex items-center gap-1.5" style={{ color: COLORS.terracotta }}>
                 🐶 Sembra la tua prima volta da noi!
@@ -562,10 +591,10 @@ function ClienteView({ prenotazioni, setPrenotazioni, eventi, setEventi, anagraf
           <PrimaryButton
             type="submit"
             full
-            disabled={!form.consensoPrivacy || riconoscimento.stato === "controllo" || riconoscimento.ambiguo}
+            disabled={!form.consensoPrivacy || riconoscimento.stato === "controllo" || riconoscimento.ambiguo || (!prova && (!riconoscimento.socio || Number(riconoscimento.lezioniResidue || 0) <= 0))}
             style={{
-              opacity: form.consensoPrivacy && riconoscimento.stato !== "controllo" && !riconoscimento.ambiguo ? 1 : 0.5,
-              cursor: form.consensoPrivacy && riconoscimento.stato !== "controllo" && !riconoscimento.ambiguo ? "pointer" : "not-allowed",
+              opacity: form.consensoPrivacy && riconoscimento.stato !== "controllo" && !riconoscimento.ambiguo && (prova || (riconoscimento.socio && Number(riconoscimento.lezioniResidue || 0) > 0)) ? 1 : 0.5,
+              cursor: form.consensoPrivacy && riconoscimento.stato !== "controllo" && !riconoscimento.ambiguo && (prova || (riconoscimento.socio && Number(riconoscimento.lezioniResidue || 0) > 0)) ? "pointer" : "not-allowed",
             }}
           >
             Conferma prenotazione
@@ -651,14 +680,14 @@ function ClienteView({ prenotazioni, setPrenotazioni, eventi, setEventi, anagraf
           <div className="rounded-xl p-3 mb-5 text-left flex items-center gap-3" style={{ background: "#F3DDCE" }}>
             <DogAvatar size={38} bg={COLORS.terracotta} />
             <p className="text-[12.5px]" style={{ color: "#8A4A28" }}>
-              La tua richiesta è <b>in sospeso</b>: essendo la tua prima volta, l'istruttore deve approvarla prima che il posto sia confermato. Ti aggiorneremo appena succede.
+              La richiesta è in attesa di verifica. Per la lezione di prova il posto verrà gestito direttamente dallo staff.
             </p>
           </div>
         ) : (
           <div className="rounded-xl p-3 mb-5 text-left flex items-center gap-3" style={{ background: "#E7F6EC" }}>
             <DogAvatar size={38} bg={COLORS.navy} />
             <div className="text-[12.5px]" style={{ color: COLORS.navy }}>
-              Ti abbiamo riconosciuto: <b>{riconosciuto.cane}</b> ha ancora <b>{riconosciuto.lezioniResidue}</b> lezioni sul carnet.
+              <b>{riconosciuto?.cane || 'Il tuo cane'}</b>: restano <b>{riconosciuto?.lezioniResidue ?? riconoscimento.lezioniResidue}</b> ingressi disponibili. Nessun ingresso viene scalato con la sola prenotazione.
             </div>
           </div>
         )}
@@ -690,17 +719,18 @@ function ClienteView({ prenotazioni, setPrenotazioni, eventi, setEventi, anagraf
       <div className="mb-5 flex items-start justify-between gap-3">
         <div>
           <div className="text-2xl font-bold leading-tight flex items-center gap-2" style={{ color: COLORS.navy, fontFamily: "Oswald, sans-serif" }}>
-            Prenota una lezione <span>🐶</span>
+            {prova ? "Prenota la lezione di prova" : "Prenota una lezione"} <span>{prova ? "🐾" : "🐶"}</span>
           </div>
           <div className="w-10 h-[3px] rounded-full mt-1.5 mb-2" style={{ background: COLORS.terracotta }} />
-          <div className="text-[13px] text-slate-500">Scegli il turno, ti aspettiamo al campo!</div>
+          <div className="text-[13px] text-slate-500">{prova ? "Prima volta? Scegli uno dei turni di prova disponibili." : "Scegli il turno: prima di confermare vedrai gli ingressi residui."}</div>
         </div>
         <button onClick={onAggiorna} className="shrink-0 mt-1 p-2 rounded-full" style={{ background: "#EEF1F4" }} title="Aggiorna">
           <RefreshCw size={16} color={COLORS.navy} />
         </button>
       </div>
+      {eventiVisibili.length === 0 && <div className="rounded-xl p-4 text-sm text-slate-500" style={{ background: "#F5F6F8" }}>Nessun turno disponibile al momento.</div>}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-        {eventi.map((slot) => (
+        {eventiVisibili.map((slot) => (
           <LezioneCard key={slot.id} slot={slot} onClick={() => setSlotScelto(slot)} />
         ))}
       </div>
@@ -1048,9 +1078,9 @@ function AnagraficaCard({ c, onUpdate, onDelete, storico, storicoLezioni = [], o
             <QuotaRow label="Quota associativa" quota={c.quotaAssociativa || { importo: 0, versato: 0, scadenza: "", stato: "da versare" }} onSave={(q) => onUpdate({ ...c, quotaAssociativa: q })} puoModificare={puoModificare} />
           </div>
 
-          {/* Carnet lezioni: tracciato per davvero tramite gli acquisti */}
+          {/* Pacchetti: il vecchio carnet è ora unificato nel concetto di Pacchetto */}
           <div>
-            <SectionLabel>🎫 Carnet lezioni</SectionLabel>
+            <SectionLabel>📦 Pacchetto</SectionLabel>
             <div className="rounded-lg p-3 mb-2" style={{ background: "#F5F6F8" }}>
               <div className="flex items-center justify-between">
                 <span className="text-[12px] font-semibold" style={{ color: COLORS.navy }}>Lezioni residue</span>
@@ -1068,7 +1098,7 @@ function AnagraficaCard({ c, onUpdate, onDelete, storico, storicoLezioni = [], o
                   className="flex-1 rounded-lg border px-2.5 py-2 text-[12.5px] outline-none bg-white"
                   style={{ borderColor: "#E2E5E9" }}
                 >
-                  <option value="">Scegli un carnet…</option>
+                  <option value="">Scegli un pacchetto…</option>
                   {carnetTipi.map((t) => (
                     <option key={t.id} value={t.id}>{t.nome} — {t.numeroLezioni} lez. — €{t.prezzo}</option>
                   ))}
@@ -1079,16 +1109,16 @@ function AnagraficaCard({ c, onUpdate, onDelete, storico, storicoLezioni = [], o
                   className="px-3 rounded-lg text-[12px] font-bold text-white disabled:opacity-40"
                   style={{ background: COLORS.green, fontFamily: "Oswald, sans-serif" }}
                 >
-                  Registra
+                  Assegna e comunica
                 </button>
               </div>
             )}
 
             <div className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: COLORS.muted }}>
-              Storico acquisti
+              Pacchetti assegnati
             </div>
             {(!acquistiCane || acquistiCane.length === 0) ? (
-              <p className="text-[12px] text-slate-400">🐾 Nessun carnet registrato ancora.</p>
+              <p className="text-[12px] text-slate-400">🐾 Nessun pacchetto assegnato.</p>
             ) : (
               <div className="space-y-1.5">
                 {acquistiCane.map((a) => {
@@ -1096,11 +1126,13 @@ function AnagraficaCard({ c, onUpdate, onDelete, storico, storicoLezioni = [], o
                   return (
                     <div key={a.id} className="rounded-lg p-2.5 flex items-center justify-between" style={{ background: "#F5F6F8" }}>
                       <div className="min-w-0">
-                        <div className="text-[12px] font-semibold truncate" style={{ color: COLORS.navy }}>{tipo ? tipo.nome : (a.carnetId && !/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(String(a.carnetId)) ? a.carnetId : "Carnet")}</div>
-                        <div className="text-[10.5px] font-mono" style={{ color: COLORS.muted }}>Acquistato il {formatData(a.data)}</div>
+                        <div className="text-[12px] font-semibold truncate" style={{ color: COLORS.navy }}>{tipo ? tipo.nome : (a.carnetId && !/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(String(a.carnetId)) ? a.carnetId : "Pacchetto")}</div>
+                        <div className="text-[10.5px] font-mono" style={{ color: COLORS.muted }}>#{a.numeroPacchetto || "—"} · {formatData(a.data)} · {String(a.statoPacchetto || "").replaceAll("_", " ")}</div>
+                        {(a.documentoUrl || a.bonificoUrl) && <div className="text-[10.5px] mt-1 flex gap-2">{a.documentoUrl && <a href={a.documentoUrl} target="_blank" rel="noreferrer" className="underline">Modulo</a>}{a.bonificoUrl && <a href={a.bonificoUrl} target="_blank" rel="noreferrer" className="underline">Bonifico</a>}</div>}
                       </div>
-                      <div className="text-[11px] font-mono shrink-0" style={{ color: a.lezioniResidue > 0 ? COLORS.green : COLORS.red }}>
-                        {a.lezioniResidue}/{a.lezioniTotali} lez.
+                      <div className="text-right shrink-0">
+                        <div className="text-[11px] font-mono" style={{ color: a.statoPacchetto === "attivo" ? COLORS.green : COLORS.terracotta }}>{a.lezioniResidue}/{a.lezioniTotali} ingressi</div>
+                        {puoModificare && a.statoPacchetto === "documenti_ricevuti" && <button onClick={() => window.dispatchEvent(new CustomEvent('acs-attiva-pacchetto',{detail:{id:a.id}}))} className="mt-1 text-[10.5px] font-semibold underline" style={{color:COLORS.green}}>Approva e attiva</button>}
                       </div>
                     </div>
                   );
@@ -1124,7 +1156,7 @@ function AnagraficaCard({ c, onUpdate, onDelete, storico, storicoLezioni = [], o
                       <span className="text-[10.5px] font-semibold uppercase" style={{ color: l.stato === "annullata" ? COLORS.red : l.stato === "presente" ? COLORS.green : COLORS.muted }}>{l.stato}</span>
                     </div>
                     {mostraEconomico && (Number.isFinite(l.carnetPrima) && Number.isFinite(l.carnetDopo) && (l.carnetPrima || l.carnetDopo || l.movimentoCarnet) ? (
-                      <div className="text-[11px] mt-1 font-mono" style={{ color: COLORS.muted }}>Carnet: {l.carnetPrima} → {l.carnetDopo} {l.movimentoCarnet > 0 ? "(lezione restituita)" : l.movimentoCarnet < 0 ? "(lezione utilizzata)" : ""}</div>
+                      <div className="text-[11px] mt-1 font-mono" style={{ color: COLORS.muted }}>Pacchetto: {l.carnetPrima} → {l.carnetDopo} {l.movimentoCarnet > 0 ? "(lezione restituita)" : l.movimentoCarnet < 0 ? "(lezione utilizzata)" : ""}</div>
                     ) : (
                       <div className="text-[11px] mt-1" style={{ color: COLORS.muted }}>Nessun movimento carnet registrato.</div>
                     ))}
@@ -1334,7 +1366,7 @@ function CarnetRow({ c, onSave, onDelete, puoModificare }) {
   if (modifica) {
     return (
       <div className="rounded-xl p-3.5 space-y-2" style={{ background: "#F5F6F8" }}>
-        <Input label="Nome tipologia" value={bozza.nome} onChange={(v) => setBozza({ ...bozza, nome: v })} required />
+        <Input label="Nome pacchetto" value={bozza.nome} onChange={(v) => setBozza({ ...bozza, nome: v })} required />
         <div className="grid grid-cols-2 gap-2">
           <Input label="N. lezioni" value={String(bozza.numeroLezioni)} onChange={(v) => setBozza({ ...bozza, numeroLezioni: v.replace(/\D/g, "") })} required />
           <Input label="Prezzo €" value={String(bozza.prezzo)} onChange={(v) => setBozza({ ...bozza, prezzo: v.replace(/\D/g, "") })} required />
@@ -1624,6 +1656,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
   const isAdmin = istruttoreLoggato.ruolo === "admin";
   const isIstruttore = istruttoreLoggato.ruolo === "istruttore";
   const puoModificare = isAdmin;
+  const puoGestireAnagrafica = isAdmin || isIstruttore;
   const puoConfermarePresenza = isAdmin || isIstruttore;
 
   const iscrizioniInAttesa = iscrizioni.filter((i) => String(i.stato || "").toLowerCase().includes("attesa"));
@@ -1634,9 +1667,8 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
     { key: "lezioni", label: "🦮 Lezioni" },
     { key: "impostazioni", label: iscrizioniInAttesa.length > 0 ? `⚙️ Setup (${iscrizioniInAttesa.length})` : "⚙️ Setup" },
   ] : [
-    { key: "anagrafica", label: "🐾 Utenti / Cani" },
+    { key: "anagrafica", label: "🐾 Anagrafica" },
     { key: "lezioni", label: "🦮 Presenze" },
-    { key: "utenti", label: "👤 Utenti" },
   ];
 
   async function approvaIscrizione(isc) {
@@ -1883,22 +1915,37 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
   async function registraAcquisto(cane, carnetId) {
     const tipo = carnetTipi.find((c) => c.id === carnetId);
     if (!tipo) return;
-    const c = anagrafica.find((a) => a.cane === cane) || {};
+    if (!window.confirm(`Assegnare il pacchetto "${tipo.nome}" a ${cane} e inviare la comunicazione al cliente?`)) return;
     try {
-      const { data, error } = await supabase.from("acquisti").insert({
-        cane_nome: cane, carnet_id: carnetId,
-        cliente_nome: c.conduttore || null, cliente_email: c.email || null, cliente_telefono: c.telefono || null,
-        lezioni_totali: tipo.numeroLezioni, lezioni_residue: tipo.numeroLezioni, pagato: true
-      }).select("*").single();
+      const { data: risposta, error } = await supabase.rpc("acs_assegna_pacchetto", { p_cane_nome: cane, p_carnet_id: carnetId });
       if (error) throw error;
-      const nuovoAcquisto = mappaAcquisto(data);
-      setAcquisti((prev) => [nuovoAcquisto, ...prev]);
-      setAnagrafica((prev) => prev.map((a) => a.cane === cane ? { ...a, lezioniResidue: a.lezioniResidue + tipo.numeroLezioni, lezioniTotali: a.lezioniTotali + tipo.numeroLezioni } : a));
-      registraLog(istruttoreLoggato.nome, "creazione", "Acquisto", `${cane}: nuovo carnet "${tipo.nome}" (${tipo.numeroLezioni} lezioni)`);
+      if (!risposta?.ok || !risposta?.acquisto_id) throw new Error(risposta?.errore || "Assegnazione non riuscita");
+      await inviaEmailPacchetto(risposta.acquisto_id);
+      registraLog(istruttoreLoggato.nome, "creazione", "Pacchetto", `${cane}: assegnato "${tipo.nome}" e inviata comunicazione`);
+      await caricaTuttoDopoLogin();
+      alert(`Pacchetto #${risposta.numero_pacchetto || ""} assegnato. Comunicazione inviata al cliente.`);
     } catch (err) {
-      alert(err?.message || "Non è stato possibile registrare l'acquisto.");
+      alert(err?.message || "Non è stato possibile assegnare il pacchetto.");
     }
   }
+
+  async function attivaPacchetto(acquistoId) {
+    if (!isAdmin) return;
+    if (!window.confirm("Confermi che modulo di adesione e bonifico sono corretti? Il pacchetto verrà attivato e gli ingressi resi disponibili.")) return;
+    try {
+      const { data: risposta, error } = await supabase.rpc("acs_attiva_pacchetto", { p_acquisto_id: acquistoId });
+      if (error) throw error;
+      if (!risposta?.ok) throw new Error(risposta?.errore || "Attivazione non riuscita");
+      await caricaTuttoDopoLogin();
+      alert(`Pacchetto attivato: ${risposta.lezioni_residue} ingressi disponibili.`);
+    } catch (err) { alert(err?.message || "Errore durante l'attivazione del pacchetto."); }
+  }
+
+  useEffect(() => {
+    const h = (e) => { if (e?.detail?.id) attivaPacchetto(e.detail.id); };
+    window.addEventListener('acs-attiva-pacchetto', h);
+    return () => window.removeEventListener('acs-attiva-pacchetto', h);
+  }, [isAdmin]);
 
 
   async function creaCane(e) {
@@ -1957,7 +2004,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
       }).select("*").single();
       if (error) throw error;
       setCarnetTipi((prev) => [...prev, mappaCarnet(data)]);
-      registraLog(istruttoreLoggato.nome, "creazione", "Carnet", `Nuova tipologia: ${formCarnet.nome}`);
+      registraLog(istruttoreLoggato.nome, "creazione", "Carnet", `Nuovo pacchetto: ${formCarnet.nome}`);
       setFormCarnet({ nome: "", numeroLezioni: "", prezzo: "" });
       setNuovoCarnet(false);
     } catch (err) {
@@ -2082,7 +2129,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
             </div>
             )}
 
-            {puoModificare && (
+            {puoGestireAnagrafica && (
               nuovoCane ? (
                 <form onSubmit={creaCane} className="rounded-2xl border p-4 mb-3 space-y-3" style={{ borderColor: "#E2E5E9" }}>
                   <div className="text-[13px] font-bold flex items-center gap-1.5" style={{ color: COLORS.navy, fontFamily: "Oswald, sans-serif" }}>
@@ -2157,7 +2204,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
                   carnetTipi={carnetTipi}
                   acquistiCane={acquisti.filter((a) => a.cane === c.cane).sort((x, y) => (y.data || "").localeCompare(x.data || ""))}
                   onRegistraAcquisto={(carnetId) => registraAcquisto(c.cane, carnetId)}
-                  puoModificare={puoModificare}
+                  puoModificare={puoGestireAnagrafica}
                   mostraEconomico={isAdmin}
                 />
               ))}
@@ -2273,7 +2320,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
           <div className="flex gap-2 mb-5">
             {[
               { key: "utenti", label: "👤 Utenti" },
-              { key: "quote", label: "💳 Quote" },
+              { key: "quote", label: "📦 Pacchetti" },
               { key: "corsi", label: iscrizioniInAttesa.length > 0 ? `📋 Corsi (${iscrizioniInAttesa.length})` : "📋 Corsi" },
             ].map((s) => (
               <button
@@ -2766,6 +2813,69 @@ function bannerInstallazioneVisibileAllAvvio() {
   }
 }
 
+
+function VerificaIngressiView({ onPrenota }) {
+  const [form, setForm] = useState({ nome: "", telefono: "", cane: "" });
+  const [risultato, setRisultato] = useState(null);
+  const [errore, setErrore] = useState("");
+  async function verifica(e) {
+    e.preventDefault(); setErrore(""); setRisultato(null);
+    try {
+      const { data, error } = await supabase.rpc("verifica_ingressi_pubblici", { p_cliente_nome: form.nome, p_cliente_telefono: form.telefono, p_cane_nome: form.cane });
+      if (error) throw error;
+      if (!data?.ok || !data?.riconosciuto) { setErrore(data?.errore || "Dati non riconosciuti. Verifica nome, telefono e nome del cane."); return; }
+      setRisultato(data);
+    } catch (err) { setErrore(err?.message || "Verifica non disponibile."); }
+  }
+  return <div className="max-w-md sm:max-w-2xl mx-auto px-4 py-6">
+    <div className="text-2xl font-bold" style={{color:COLORS.navy,fontFamily:"Oswald, sans-serif"}}>Verifica ingressi 🎟️</div>
+    <p className="text-[13px] text-slate-500 mt-1 mb-5">Inserisci i dati del titolare e del cane per conoscere gli ingressi ancora disponibili.</p>
+    <form onSubmit={verifica} className="rounded-2xl border p-4 space-y-3" style={{borderColor:"#E2E5E9",background:"white"}}>
+      <Input label="Nome e cognome" value={form.nome} onChange={(v)=>setForm({...form,nome:v})} required />
+      <Input label="Numero di telefono" value={form.telefono} onChange={(v)=>setForm({...form,telefono:v})} required icon={<Phone size={14}/>} />
+      <Input label="Nome del cane" value={form.cane} onChange={(v)=>setForm({...form,cane:v})} required icon={<PawPrint size={14}/>} />
+      <PrimaryButton full>Verifica ingressi</PrimaryButton>
+    </form>
+    {errore && <div className="mt-4 rounded-xl p-3 text-[12.5px]" style={{background:"#FDECEA",color:COLORS.red}}>{errore}</div>}
+    {risultato && <div className="mt-4 rounded-2xl p-5 text-center" style={{background:"#E7F6EC"}}>
+      <div className="text-sm font-semibold" style={{color:COLORS.navy}}>🐶 {risultato.cane_nome}</div>
+      <div className="text-[12px] text-slate-500 mt-1">{risultato.pacchetto_nome || "Pacchetto attivo"}</div>
+      <div className="text-4xl font-bold mt-3" style={{color:COLORS.green,fontFamily:"Oswald, sans-serif"}}>{risultato.lezioni_residue}</div>
+      <div className="text-[12px] text-slate-500">ingressi disponibili su {risultato.lezioni_totali}</div>
+      <button onClick={onPrenota} className="mt-4 px-4 py-2 rounded-full text-white text-sm font-bold" style={{background:COLORS.navy}}>Prenota una lezione</button>
+    </div>}
+  </div>;
+}
+
+async function caricaFilePacchetto(file, tipo) {
+  const dataUrl = await new Promise((resolve, reject) => { const r = new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file); });
+  const resp = await fetch('/api/drive-upload', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ fileBase64:dataUrl, nomeFile:file.name, mimeType:file.type, tipo }) });
+  const d = await resp.json().catch(()=>({}));
+  if (!resp.ok || !d?.ok) throw new Error(d?.errore || 'Upload non riuscito');
+  return d.url;
+}
+
+function PacchettoAdesioneView({ token }) {
+  const [pacchetto,setPacchetto]=useState(null); const [errore,setErrore]=useState(""); const [invio,setInvio]=useState(false);
+  const [accetta,setAccetta]=useState(false); const [modulo,setModulo]=useState(null); const [bonifico,setBonifico]=useState(null); const [finito,setFinito]=useState(false);
+  useEffect(()=>{ (async()=>{ const {data,error}=await supabase.rpc('get_pacchetto_pubblico',{p_token:token}); if(error||!data?.ok){setErrore(data?.errore||error?.message||'Pacchetto non trovato');return;} setPacchetto(data); })(); },[token]);
+  async function conferma(e){ e.preventDefault(); if(!accetta||!modulo||!bonifico){setErrore('Devi accettare le condizioni e caricare sia il modulo PDF sia la ricevuta del bonifico.');return;} setInvio(true);setErrore(''); try{
+    const documentoUrl=await caricaFilePacchetto(modulo,'documenti'); const bonificoUrl=await caricaFilePacchetto(bonifico,'ricevute');
+    const {data,error}=await supabase.rpc('conferma_adesione_pacchetto',{p_token:token,p_documento_url:documentoUrl,p_bonifico_url:bonificoUrl,p_accetta:true}); if(error||!data?.ok) throw new Error(data?.errore||error?.message||'Invio non riuscito'); setFinito(true);
+  }catch(err){setErrore(err?.message||'Invio non riuscito');}finally{setInvio(false);} }
+  if(finito) return <div className="max-w-md mx-auto px-4 py-12 text-center"><CheckCircle2 size={48} color={COLORS.green} className="mx-auto"/><h2 className="text-xl font-bold mt-4" style={{color:COLORS.navy}}>Adesione inviata</h2><p className="text-sm text-slate-500 mt-2">Lo staff verificherà modulo e bonifico. Dopo l'approvazione gli ingressi del pacchetto saranno attivati.</p></div>;
+  return <div className="max-w-md mx-auto px-4 py-6"><div className="text-2xl font-bold" style={{color:COLORS.navy,fontFamily:"Oswald, sans-serif"}}>Conferma pacchetto 📦</div>
+    {errore && <div className="mt-4 rounded-xl p-3 text-sm" style={{background:'#FDECEA',color:COLORS.red}}>{errore}</div>}
+    {pacchetto && <form onSubmit={conferma} className="mt-4 rounded-2xl border p-4 space-y-4" style={{borderColor:'#E2E5E9',background:'white'}}>
+      <div><div className="text-xs text-slate-500">Pacchetto</div><div className="font-bold" style={{color:COLORS.navy}}>#{pacchetto.numero_pacchetto} · {pacchetto.pacchetto_nome}</div><div className="text-sm text-slate-500">{pacchetto.cane_nome} · {pacchetto.lezioni_totali} ingressi · €{Number(pacchetto.prezzo||0).toFixed(2).replace('.',',')}</div></div>
+      <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={accetta} onChange={e=>setAccetta(e.target.checked)} className="mt-1"/><span>Dichiaro di accettare il pacchetto e le condizioni indicate nel modulo di adesione.</span></label>
+      <label className="block"><span className="text-xs font-semibold text-slate-500">Modulo di adesione firmato (PDF)</span><input type="file" accept="application/pdf" onChange={e=>setModulo(e.target.files?.[0]||null)} className="mt-1 block w-full text-sm"/></label>
+      <label className="block"><span className="text-xs font-semibold text-slate-500">Ricevuta bonifico (PDF o immagine)</span><input type="file" accept="application/pdf,image/*" onChange={e=>setBonifico(e.target.files?.[0]||null)} className="mt-1 block w-full text-sm"/></label>
+      <PrimaryButton full disabled={invio}>{invio?'Invio in corso…':'Conferma adesione'}</PrimaryButton>
+    </form>}
+  </div>;
+}
+
 /* ---------- Vista Iscrizione (modulo pubblico di iscrizione ai corsi) ---------- */
 
 // Facoltativo: se compili questi dati, nel passo 3 del modulo compare il riquadro
@@ -3190,7 +3300,7 @@ function IscrizioneView() {
 }
 
 function AppInterno() {
-  const [role, setRole] = useState("iscrizione");
+  const [role, setRole] = useState("prova");
   const [installVisible, setInstallVisible] = useState(bannerInstallazioneVisibileAllAvvio);
   const backendCollegato = true;
   const [prenotazioni, setPrenotazioni] = useState(backendCollegato ? [] : MOCK_PRENOTAZIONI);
@@ -3198,6 +3308,7 @@ function AppInterno() {
   const [anagrafica, setAnagrafica] = useState(backendCollegato ? [] : MOCK_ANAGRAFICA);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [attivita, setAttivita] = useState(false);
+  const pacchettoToken = new URLSearchParams(window.location.search).get("pacchetto");
 
   async function caricaEventiPubblici() {
     try {
@@ -3276,6 +3387,10 @@ function AppInterno() {
     </svg>
   `)}`;
 
+  if (pacchettoToken) {
+    return <div className="min-h-screen" style={{background:COLORS.paper,fontFamily:"Inter, sans-serif"}}><PacchettoAdesioneView token={pacchettoToken} /></div>;
+  }
+
   return (
     <div
       className="min-h-screen overflow-x-hidden"
@@ -3302,18 +3417,14 @@ function AppInterno() {
       {installVisible && !appGiaInstallata() && <InstallBanner onClose={chiudiBannerInstallazione} deferredPrompt={deferredPrompt} onInstallClick={installaApp} />}
       {/* Entrambe le viste restano montate: così l'istruttore non perde la sessione
           passando all'area cliente e tornando indietro — non serve rifare il login. */}
-      <div style={{ display: role === "cliente" ? "block" : "none" }}>
-        <ClienteView
-          prenotazioni={prenotazioni}
-          setPrenotazioni={setPrenotazioni}
-          eventi={eventi}
-          setEventi={setEventi}
-          anagrafica={anagrafica}
-          onAggiorna={caricaEventiPubblici}
-        />
+      <div style={{ display: role === "prova" ? "block" : "none" }}>
+        <ClienteView prenotazioni={prenotazioni} setPrenotazioni={setPrenotazioni} eventi={eventi} setEventi={setEventi} anagrafica={anagrafica} onAggiorna={caricaEventiPubblici} modalita="prova" />
       </div>
-      <div style={{ display: role === "iscrizione" ? "block" : "none" }}>
-        <IscrizioneView />
+      <div style={{ display: role === "cliente" ? "block" : "none" }}>
+        <ClienteView prenotazioni={prenotazioni} setPrenotazioni={setPrenotazioni} eventi={eventi} setEventi={setEventi} anagrafica={anagrafica} onAggiorna={caricaEventiPubblici} modalita="lezione" />
+      </div>
+      <div style={{ display: role === "verifica" ? "block" : "none" }}>
+        <VerificaIngressiView onPrenota={() => setRole("cliente")} />
       </div>
       <div style={{ display: role === "istruttore" ? "block" : "none" }}>
         <IstruttoreView

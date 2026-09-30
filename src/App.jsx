@@ -99,7 +99,7 @@ function mappaPrenotazione(r) {
 }
 
 function mappaCarnet(r) {
-  return { id: r.id, nome: r.nome, numeroLezioni: Number(r.numero_lezioni) || 0, prezzo: Number(r.prezzo) || 0 };
+  return { id: r.id, nome: r.nome, numeroLezioni: Number(r.numero_lezioni) || 0, prezzo: Number(r.prezzo) || 0, descrizione: r.descrizione || '' };
 }
 
 function mappaAcquisto(r) {
@@ -635,7 +635,7 @@ function ClienteView({ prenotazioni, setPrenotazioni, eventi, setEventi, anagraf
                     <div className="space-y-4">
                       <p><b style={{ color: COLORS.navy }}>Titolare del trattamento</b><br />ACS – Associazione Cani Salvataggio, contattabile tramite i recapiti ufficiali dell’associazione.</p>
                       <p><b style={{ color: COLORS.navy }}>Dati trattati</b><br />Nome e cognome, numero di telefono e informazioni relative al cane comunicate durante la registrazione e la prenotazione.</p>
-                      <p><b style={{ color: COLORS.navy }}>Finalità</b><br />Gestione dell’anagrafica, delle prenotazioni, dei carnet, delle lezioni e delle comunicazioni strettamente collegate alle attività associative.</p>
+                      <p><b style={{ color: COLORS.navy }}>Finalità</b><br />Gestione dell’anagrafica, delle prenotazioni, dei pacchetti, delle lezioni e delle comunicazioni strettamente collegate alle attività associative.</p>
                       <p><b style={{ color: COLORS.navy }}>Base giuridica</b><br />Esecuzione delle attività richieste dall’interessato e adempimento degli obblighi connessi alla gestione del servizio.</p>
                       <p><b style={{ color: COLORS.navy }}>Conservazione e comunicazione</b><br />I dati sono conservati per il tempo necessario alla gestione del rapporto e agli obblighi di legge. Non sono diffusi e possono essere comunicati solo a soggetti autorizzati o nei casi previsti dalla legge.</p>
                       <p><b style={{ color: COLORS.navy }}>Diritti dell’interessato</b><br />È possibile richiedere accesso, rettifica, cancellazione, limitazione o opposizione al trattamento e rivolgersi al Garante per la protezione dei dati personali, secondo gli articoli 15-22 del GDPR.</p>
@@ -1142,7 +1142,7 @@ function AnagraficaCard({ c, onUpdate, onDelete, storico, storicoLezioni = [], o
           </div>
           </>)}
 
-          {/* Storico lezioni e movimenti carnet */}
+          {/* Storico lezioni e movimenti pacchetto */}
           <div>
             <SectionLabel>📅 Storico lezioni</SectionLabel>
             {storicoLezioni.length === 0 ? (
@@ -1158,7 +1158,7 @@ function AnagraficaCard({ c, onUpdate, onDelete, storico, storicoLezioni = [], o
                     {mostraEconomico && (Number.isFinite(l.carnetPrima) && Number.isFinite(l.carnetDopo) && (l.carnetPrima || l.carnetDopo || l.movimentoCarnet) ? (
                       <div className="text-[11px] mt-1 font-mono" style={{ color: COLORS.muted }}>Pacchetto: {l.carnetPrima} → {l.carnetDopo} {l.movimentoCarnet > 0 ? "(lezione restituita)" : l.movimentoCarnet < 0 ? "(lezione utilizzata)" : ""}</div>
                     ) : (
-                      <div className="text-[11px] mt-1" style={{ color: COLORS.muted }}>Nessun movimento carnet registrato.</div>
+                      <div className="text-[11px] mt-1" style={{ color: COLORS.muted }}>Nessun movimento pacchetto registrato.</div>
                     ))}
                   </div>
                 ))}
@@ -1323,7 +1323,7 @@ function EventoCard({ slot, iscrizioni, daConfermare, anagrafica, onConfermaPres
                       <button
                         onClick={() => {
                           const testo = p.stato === "presente"
-                            ? `Annullare l'iscrizione di ${p.cane}? La lezione verrà restituita al carnet se era stata scalata.`
+                            ? `Annullare l'iscrizione di ${p.cane}? La lezione verrà restituita al pacchetto se era stata scalata.`
                             : `Annullare l'iscrizione di ${p.cane}? Il posto tornerà disponibile.`;
                           if (window.confirm(testo)) onAnnullaIscrizione(p);
                         }}
@@ -1368,9 +1368,10 @@ function CarnetRow({ c, onSave, onDelete, puoModificare }) {
       <div className="rounded-xl p-3.5 space-y-2" style={{ background: "#F5F6F8" }}>
         <Input label="Nome pacchetto" value={bozza.nome} onChange={(v) => setBozza({ ...bozza, nome: v })} required />
         <div className="grid grid-cols-2 gap-2">
-          <Input label="N. lezioni" value={String(bozza.numeroLezioni)} onChange={(v) => setBozza({ ...bozza, numeroLezioni: v.replace(/\D/g, "") })} required />
+          <Input label="N. ingressi" value={String(bozza.numeroLezioni)} onChange={(v) => setBozza({ ...bozza, numeroLezioni: v.replace(/\D/g, "") })} required />
           <Input label="Prezzo €" value={String(bozza.prezzo)} onChange={(v) => setBozza({ ...bozza, prezzo: v.replace(/\D/g, "") })} required />
         </div>
+        <Input label="Descrizione (facoltativa)" value={bozza.descrizione || ""} onChange={(v) => setBozza({ ...bozza, descrizione: v })} />
         <div className="flex gap-3 pt-1">
           <button onClick={() => { onSave(bozza); setModifica(false); }} className="text-[12px] font-semibold" style={{ color: COLORS.green }}>Salva</button>
           <button onClick={() => { setBozza(c); setModifica(false); }} className="text-[12px]" style={{ color: COLORS.muted }}>Annulla</button>
@@ -1383,7 +1384,7 @@ function CarnetRow({ c, onSave, onDelete, puoModificare }) {
     <div className="rounded-xl p-3.5 flex items-center justify-between gap-2" style={{ background: "#F5F6F8" }}>
       <div className="min-w-0">
         <div className="font-semibold text-sm truncate" style={{ color: COLORS.navy }}>{c.nome}</div>
-        <div className="text-[12px] text-slate-500">{c.numeroLezioni} lezion{c.numeroLezioni === 1 ? "e" : "i"}</div>
+        <div className="text-[12px] text-slate-500">{c.numeroLezioni} ingress{c.numeroLezioni === 1 ? "o" : "i"}{c.descrizione ? ` · ${c.descrizione}` : ""}</div>
       </div>
       <div className="flex items-center gap-2 shrink-0">
         <div className="font-mono text-sm" style={{ color: COLORS.green }}>€{c.prezzo}</div>
@@ -1415,7 +1416,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
   const [carnetTipi, setCarnetTipi] = useState([]);
   const [acquisti, setAcquisti] = useState([]);
   const [nuovoCarnet, setNuovoCarnet] = useState(false);
-  const [formCarnet, setFormCarnet] = useState({ nome: "", numeroLezioni: "", prezzo: "" });
+  const [formCarnet, setFormCarnet] = useState({ nome: "", numeroLezioni: "", prezzo: "", descrizione: "" });
   const [quotaAssociativa, setQuotaAssociativa] = useState(50);
   const [modificaQuota, setModificaQuota] = useState(false);
   const [ricercaAnagrafica, setRicercaAnagrafica] = useState("");
@@ -1517,7 +1518,6 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
         acquistiMappati = (acquistiRes.data || []).map(mappaAcquisto);
         setAcquisti(acquistiMappati);
         setCarnetTipi((carnetRes.data || []).map(mappaCarnet));
-        setCorsi(corsiRes.data || []);
         setIscrizioni(iscrizioniRes.data || []);
         const quota = impostazioniRes.data?.valore;
         const quotaNumero = typeof quota === "number" ? quota : Number(quota);
@@ -1525,7 +1525,6 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
       } else {
         setAcquisti([]);
         setCarnetTipi([]);
-        setCorsi([]);
         setIscrizioni([]);
       }
 
@@ -1684,7 +1683,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
 
   async function approvaIscrizione(isc) {
     if (!isAdmin) return;
-    if (!window.confirm(`Approvare l'iscrizione di ${isc.nome} ${isc.cognome} (${isc.cane_nome}) al corso "${isc.corso_selezionato}"?\n\nVerranno creati automaticamente la scheda in Anagrafica e il carnet.`)) return;
+    if (!window.confirm(`Approvare l'iscrizione di ${isc.nome} ${isc.cognome} (${isc.cane_nome}) al corso "${isc.corso_selezionato}"?\n\nVerrà creata automaticamente la scheda in Anagrafica.`)) return;
     try {
       const { data: risposta, error } = await supabase.rpc("acs_approva_iscrizione", { p_iscrizione_id: isc.id });
       if (error) throw error;
@@ -1780,7 +1779,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
     try {
       const { data: risposta, error } = await supabase.rpc("acs_conferma_presenza", { p_prenotazione_id: prenotazioneId });
       if (error) throw error;
-      registraLog(istruttoreLoggato.nome, "modifica", "Prenotazione", `Presenza confermata per ${caneNome}` + (risposta?.credito_scalato === false ? " (nessun credito residuo sul carnet)" : ""));
+      registraLog(istruttoreLoggato.nome, "modifica", "Prenotazione", `Presenza confermata per ${caneNome}` + (risposta?.credito_scalato === false ? " (nessun ingresso residuo sul pacchetto)" : ""));
       await caricaTuttoDopoLogin();
     } catch (err) {
       alert(err?.message || "Non è stato possibile confermare la presenza.");
@@ -2003,42 +2002,44 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
     e.preventDefault();
     try {
       const { data, error } = await supabase.from("carnet").insert({
-        nome: formCarnet.nome, numero_lezioni: Number(formCarnet.numeroLezioni) || 1,
-        prezzo: Number(formCarnet.prezzo) || 0, attivo: true
+        nome: formCarnet.nome.trim(), numero_lezioni: Number(formCarnet.numeroLezioni) || 1,
+        prezzo: Number(formCarnet.prezzo) || 0, descrizione: formCarnet.descrizione.trim(), attivo: true
       }).select("*").single();
       if (error) throw error;
       setCarnetTipi((prev) => [...prev, mappaCarnet(data)]);
-      registraLog(istruttoreLoggato.nome, "creazione", "Carnet", `Nuovo pacchetto: ${formCarnet.nome}`);
-      setFormCarnet({ nome: "", numeroLezioni: "", prezzo: "" });
+      registraLog(istruttoreLoggato.nome, "creazione", "Pacchetto", `Nuovo pacchetto: ${formCarnet.nome}`);
+      setFormCarnet({ nome: "", numeroLezioni: "", prezzo: "", descrizione: "" });
       setNuovoCarnet(false);
     } catch (err) {
-      alert(err?.message || "Non è stato possibile creare la tipologia di carnet.");
+      alert(err?.message || "Non è stato possibile creare il pacchetto.");
     }
   }
 
 
   async function modificaCarnet(carnetId, nuoviDati) {
     try {
-      const payload = { nome: nuoviDati.nome, numero_lezioni: Number(nuoviDati.numeroLezioni) || 1, prezzo: Number(nuoviDati.prezzo) || 0 };
+      const payload = { nome: nuoviDati.nome.trim(), numero_lezioni: Number(nuoviDati.numeroLezioni) || 1, prezzo: Number(nuoviDati.prezzo) || 0, descrizione: String(nuoviDati.descrizione || "").trim() };
       const { data, error } = await supabase.from("carnet").update(payload).eq("id", carnetId).select("*").single();
       if (error) throw error;
       setCarnetTipi((prev) => prev.map((c) => (c.id === carnetId ? mappaCarnet(data) : c)));
-      registraLog(istruttoreLoggato.nome, "modifica", "Carnet", `Tipologia aggiornata: ${payload.nome}`);
+      registraLog(istruttoreLoggato.nome, "modifica", "Pacchetto", `Pacchetto aggiornato: ${payload.nome}`);
     } catch (err) {
-      alert(err?.message || "Non è stato possibile modificare la tipologia.");
+      alert(err?.message || "Non è stato possibile modificare il pacchetto.");
     }
   }
 
 
   async function eliminaCarnet(carnetId, nome) {
-    if (!window.confirm(`Eliminare la tipologia "${nome}"?`)) return;
+    if (!isAdmin) return;
+    if (!window.confirm(`Eliminare il pacchetto "${nome}"?\n\nLe assegnazioni già effettuate resteranno nello storico.`)) return;
     try {
-      const { error } = await supabase.from("carnet").delete().eq("id", carnetId);
+      const { data, error } = await supabase.rpc("acs_elimina_tipo_pacchetto", { p_pacchetto_id: carnetId });
       if (error) throw error;
+      if (data && data.ok === false) throw new Error(data.errore || "Eliminazione non riuscita");
       setCarnetTipi((prev) => prev.filter((c) => c.id !== carnetId));
-      registraLog(istruttoreLoggato.nome, "eliminazione", "Carnet", `Eliminata tipologia: ${nome}`);
+      registraLog(istruttoreLoggato.nome, "eliminazione", "Pacchetto", `Eliminato pacchetto: ${nome}`);
     } catch (err) {
-      alert(err?.message || "Non è stato possibile eliminare la tipologia.");
+      alert(err?.message || "Non è stato possibile eliminare il pacchetto.");
     }
   }
 
@@ -2323,9 +2324,8 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
           {/* Sotto-navigazione: separa nettamente Utenti da Quote */}
           <div className="flex gap-2 mb-5">
             {[
-              { key: "utenti", label: "👤 Utenti" },
+              { key: "utenti", label: "👤 Staff" },
               { key: "quote", label: "📦 Pacchetti" },
-              { key: "corsi", label: iscrizioniInAttesa.length > 0 ? `📋 Corsi (${iscrizioniInAttesa.length})` : "📋 Corsi" },
             ].map((s) => (
               <button
                 key={s.key}
@@ -2341,139 +2341,6 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
               </button>
             ))}
           </div>
-
-          {/* ============ SEZIONE CORSI E ISCRIZIONI ============ */}
-          {settoreSetup === "corsi" && (
-            <div className="space-y-5">
-              <div className="rounded-2xl border p-4" style={{ borderColor: "#E2E5E9" }}>
-                <SectionLabel>📥 Iscrizioni da approvare ({iscrizioniInAttesa.length})</SectionLabel>
-                {iscrizioniInAttesa.length === 0 ? (
-                  <p className="text-[12px] text-slate-400">Nessuna iscrizione in attesa.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {iscrizioniInAttesa.map((isc) => {
-                      const urlRicevuta = /^https?:\/\//.test(String(isc.ricevuta_url || "")) ? isc.ricevuta_url : "";
-                      return (
-                        <div key={isc.id} className="rounded-xl p-3" style={{ background: "#F5F6F8" }}>
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="text-[13px] font-semibold" style={{ color: COLORS.navy }}>
-                                🐶 {isc.cane_nome} <span className="font-normal text-slate-500">· {isc.nome} {isc.cognome}</span>
-                              </div>
-                              <div className="text-[11.5px] text-slate-500 break-words">
-                                {isc.email}{isc.telefono ? ` · ${isc.telefono}` : ""}
-                              </div>
-                              <div className="text-[11.5px] text-slate-500">
-                                {isc.cane_razza ? `${isc.cane_razza}` : "Razza non indicata"}{isc.sesso_cane ? ` · ${isc.sesso_cane}` : ""}{isc.microchip ? ` · chip ${isc.microchip}` : ""}
-                              </div>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <div className="text-[13px] font-bold" style={{ color: COLORS.green, fontFamily: "Oswald, sans-serif" }}>{formattaEuro(isc.costo)}</div>
-                              <div className="text-[10.5px] font-mono" style={{ color: COLORS.muted }}>{String(isc.data_iscrizione || "").slice(0, 10)}</div>
-                            </div>
-                          </div>
-                          <div className="text-[12px] mt-2" style={{ color: COLORS.navy }}>📋 {isc.corso_selezionato}</div>
-                          <div className="text-[12px] mt-1">
-                            {urlRicevuta ? (
-                              <a href={urlRicevuta} target="_blank" rel="noreferrer" className="font-semibold underline" style={{ color: COLORS.terracotta }}>
-                                📎 Apri ricevuta del bonifico
-                              </a>
-                            ) : (Number(isc.costo) || 0) === 0 ? (
-                              <span style={{ color: COLORS.green }}>Corso gratuito: nessuna ricevuta richiesta</span>
-                            ) : (
-                              <span style={{ color: COLORS.red }}>Ricevuta non disponibile</span>
-                            )}
-                          </div>
-
-                          {puoModificare && iscrizioneRifiutoId !== isc.id && (
-                            <div className="flex gap-2 mt-3">
-                              <button onClick={() => approvaIscrizione(isc)} className="flex-1 py-2 rounded-full text-white text-[12.5px] font-bold" style={{ background: COLORS.green, fontFamily: "Oswald, sans-serif" }}>
-                                ✓ Approva
-                              </button>
-                              <button onClick={() => { setIscrizioneRifiutoId(isc.id); setMotivoRifiuto(""); }} className="flex-1 py-2 rounded-full text-[12.5px] font-bold" style={{ background: "#fff", color: COLORS.red, border: `1px solid ${COLORS.red}`, fontFamily: "Oswald, sans-serif" }}>
-                                ✕ Rifiuta
-                              </button>
-                            </div>
-                          )}
-
-                          {puoModificare && iscrizioneRifiutoId === isc.id && (
-                            <div className="mt-3 space-y-2">
-                              <Input label="Motivo del rifiuto (verrà inviato via email)" value={motivoRifiuto} onChange={setMotivoRifiuto} />
-                              <div className="flex gap-2">
-                                <button onClick={() => rifiutaIscrizione(isc)} className="flex-1 py-2 rounded-full text-white text-[12.5px] font-bold" style={{ background: COLORS.red, fontFamily: "Oswald, sans-serif" }}>
-                                  Conferma rifiuto
-                                </button>
-                                <button onClick={() => { setIscrizioneRifiutoId(null); setMotivoRifiuto(""); }} className="flex-1 py-2 rounded-full text-[12.5px] font-bold" style={{ background: "#EEF1F4", color: COLORS.navy, fontFamily: "Oswald, sans-serif" }}>
-                                  Annulla
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {iscrizioniChiuse.length > 0 && (
-                  <div className="mt-4">
-                    <div className="text-[11px] uppercase tracking-wider font-semibold mb-2" style={{ color: COLORS.muted }}>Ultime gestite</div>
-                    <div className="space-y-1.5">
-                      {iscrizioniChiuse.slice(-8).reverse().map((isc) => {
-                        const approvata = String(isc.stato).toLowerCase().includes("approvat");
-                        return (
-                          <div key={isc.id} className="flex items-center justify-between gap-2 text-[12px] rounded-lg px-2.5 py-1.5" style={{ background: "#F5F6F8" }}>
-                            <span className="truncate" style={{ color: COLORS.navy }}>{isc.cane_nome} · {isc.nome} {isc.cognome}</span>
-                            <span className="shrink-0 font-semibold" style={{ color: approvata ? COLORS.green : COLORS.red }}>
-                              {approvata ? "Approvata" : "Rifiutata"}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-2xl border p-4" style={{ borderColor: "#E2E5E9" }}>
-                <div className="flex items-center justify-between mb-3">
-                  <SectionLabel>📋 Corsi disponibili</SectionLabel>
-                  {puoModificare && (
-                    <button onClick={() => setNuovoCorso((v) => !v)} className="text-[12px] font-semibold flex items-center gap-1 -mt-3" style={{ color: COLORS.navy }}>
-                      {nuovoCorso ? <X size={14} /> : <Plus size={14} />} {nuovoCorso ? "Chiudi" : "Nuovo corso"}
-                    </button>
-                  )}
-                </div>
-
-                {nuovoCorso && (
-                  <div className="rounded-xl p-3 mb-3 space-y-2" style={{ background: "#F5F6F8" }}>
-                    <Input label="Nome del corso" value={formCorso.nome} onChange={(v) => setFormCorso({ ...formCorso, nome: v })} />
-                    <Input label="Numero di lezioni" value={formCorso.numeroLezioni} onChange={(v) => setFormCorso({ ...formCorso, numeroLezioni: v })} />
-                    <Input label="Prezzo (€)" value={formCorso.prezzo} onChange={(v) => setFormCorso({ ...formCorso, prezzo: v })} />
-                    <Input label="Descrizione (facoltativa)" value={formCorso.descrizione} onChange={(v) => setFormCorso({ ...formCorso, descrizione: v })} />
-                    <PrimaryButton full color={COLORS.navy} onClick={salvaCorso}>Salva corso</PrimaryButton>
-                  </div>
-                )}
-
-                {corsi.length === 0 ? (
-                  <p className="text-[12px] text-slate-400">Nessun corso configurato.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {corsi.map((c) => (
-                      <div key={c.id} className="rounded-xl p-3 flex items-center justify-between gap-3" style={{ background: "#F5F6F8" }}>
-                        <div className="min-w-0">
-                          <div className="text-[13px] font-semibold truncate" style={{ color: COLORS.navy }}>{c.nome}</div>
-                          <div className="text-[11.5px] text-slate-500 truncate">{Number(c.numero_lezioni) || 0} lezioni{c.descrizione ? ` · ${c.descrizione}` : ""}</div>
-                        </div>
-                        <div className="text-[13px] font-bold shrink-0" style={{ color: COLORS.green, fontFamily: "Oswald, sans-serif" }}>{formattaEuro(c.prezzo)}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <p className="text-[11px] text-slate-400 mt-3">Per modificare o disattivare un corso esistente, cambia la riga nel foglio “Corsi” (colonna attivo = FALSE per nasconderlo).</p>
-              </div>
-            </div>
-          )}
 
           {/* ============ SEZIONE UTENTI ============ */}
           {settoreSetup === "utenti" && (
@@ -2598,11 +2465,11 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
             </div>
           )}
 
-          {/* ============ SEZIONE QUOTE ============ */}
+          {/* ============ SEZIONE PACCHETTI ============ */}
           {settoreSetup === "quote" && (
             <div className="space-y-5">
               <div className="rounded-2xl border p-4" style={{ borderColor: "#E2E5E9" }}>
-                <SectionLabel>🎫 Tipi di carnet e prezzi</SectionLabel>
+                <SectionLabel>📦 Pacchetti</SectionLabel>
                 <div className="space-y-2 mb-3">
                   {carnetTipi.map((c) => (
                     <CarnetRow key={c.id} c={c} onSave={(nuoviDati) => modificaCarnet(c.id, nuoviDati)} onDelete={() => eliminaCarnet(c.id, c.nome)} puoModificare={puoModificare} />
@@ -2612,19 +2479,20 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
                 {puoModificare && (
                   nuovoCarnet ? (
                     <form onSubmit={creaCarnet} className="rounded-xl p-3.5 space-y-3" style={{ background: "#F5F6F8" }}>
-                      <Input label="Nome tipologia" value={formCarnet.nome} onChange={(v) => setFormCarnet({ ...formCarnet, nome: v })} required />
+                      <Input label="Nome pacchetto" value={formCarnet.nome} onChange={(v) => setFormCarnet({ ...formCarnet, nome: v })} required />
                       <div className="grid grid-cols-2 gap-2">
-                        <Input label="N. lezioni" value={formCarnet.numeroLezioni} onChange={(v) => setFormCarnet({ ...formCarnet, numeroLezioni: v.replace(/\D/g, "") })} required />
+                        <Input label="N. ingressi" value={formCarnet.numeroLezioni} onChange={(v) => setFormCarnet({ ...formCarnet, numeroLezioni: v.replace(/\D/g, "") })} required />
                         <Input label="Prezzo €" value={formCarnet.prezzo} onChange={(v) => setFormCarnet({ ...formCarnet, prezzo: v.replace(/\D/g, "") })} required />
                       </div>
+                      <Input label="Descrizione (facoltativa)" value={formCarnet.descrizione} onChange={(v) => setFormCarnet({ ...formCarnet, descrizione: v })} />
                       <div className="flex gap-3">
-                        <PrimaryButton color={COLORS.navy}>Salva tipologia</PrimaryButton>
+                        <PrimaryButton color={COLORS.navy}>Salva pacchetto</PrimaryButton>
                         <button type="button" onClick={() => setNuovoCarnet(false)} className="text-[12.5px]" style={{ color: COLORS.muted }}>Annulla</button>
                       </div>
                     </form>
                   ) : (
                     <button onClick={() => setNuovoCarnet(true)} className="w-full rounded-xl border border-dashed p-3 text-[13px] font-semibold flex items-center justify-center gap-1.5" style={{ borderColor: "#CBD2D9", color: COLORS.muted }}>
-                      <Plus size={15} /> Nuova tipologia carnet
+                      <Plus size={15} /> Nuovo pacchetto
                     </button>
                   )
                 )}

@@ -1091,11 +1091,11 @@ function AnagraficaCard({ c, onUpdate, onDelete, storico, storicoLezioni = [], o
             </div>
 
             {puoModificare && (
-              <div className="flex gap-2 mb-2">
+              <div className="space-y-2 mb-2">
                 <select
                   value={carnetSelezionato}
                   onChange={(e) => setCarnetSelezionato(e.target.value)}
-                  className="flex-1 rounded-lg border px-2.5 py-2 text-[12.5px] outline-none bg-white"
+                  className="w-full min-w-0 rounded-lg border px-2.5 py-2.5 text-[12.5px] outline-none bg-white"
                   style={{ borderColor: "#E2E5E9" }}
                 >
                   <option value="">Scegli un pacchetto…</option>
@@ -1104,12 +1104,13 @@ function AnagraficaCard({ c, onUpdate, onDelete, storico, storicoLezioni = [], o
                   ))}
                 </select>
                 <button
+                  type="button"
                   onClick={() => { if (carnetSelezionato) { onRegistraAcquisto(carnetSelezionato); setCarnetSelezionato(""); } }}
                   disabled={!carnetSelezionato}
-                  className="px-3 rounded-lg text-[12px] font-bold text-white disabled:opacity-40"
+                  className="w-full px-3 py-2.5 rounded-lg text-[12px] font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{ background: COLORS.green, fontFamily: "Oswald, sans-serif" }}
                 >
-                  Assegna e comunica
+                  Assegna pacchetto e invia comunicazione
                 </button>
               </div>
             )}

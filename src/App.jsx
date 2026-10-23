@@ -44,14 +44,14 @@ async function inviaEmailIscrizione(tipo, iscrizioneId, richiedeSessione = false
 }
 
 
-async function inviaEmailPacchetto(acquistoId) {
+async function inviaEmailPacchetto(acquistoId, oggettoPersonalizzato = '', messaggioPersonalizzato = '') {
   const { data } = await supabase.auth.getSession();
   const token = data?.session?.access_token;
   if (!token) throw new Error('Sessione non disponibile');
   const r = await fetch('/api/send-package-email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ acquistoId }),
+    body: JSON.stringify({ acquistoId, subject: oggettoPersonalizzato, message: messaggioPersonalizzato }),
   });
   const dati = await r.json().catch(() => ({}));
   if (!r.ok || !dati?.ok) throw new Error(dati?.errore || 'Comunicazione pacchetto non inviata');
@@ -110,6 +110,14 @@ function mappaAcquisto(r) {
     statoPacchetto: r.stato_pacchetto || (r.pagato ? 'attivo' : 'assegnato'),
     documentoUrl: r.documento_url || '', bonificoUrl: r.bonifico_url || '',
     adesioneAccettata: r.adesione_accettata === true,
+    emailInviataAt: r.email_pacchetto_inviata_at || '',
+  };
+}
+
+function mappaMovimentoPacchetto(r) {
+  return {
+    id: r.id, acquistoId: r.acquisto_id, prima: Number(r.lezioni_prima) || 0, dopo: Number(r.lezioni_dopo) || 0,
+    delta: Number(r.delta) || 0, motivo: r.motivo || '', tipo: r.tipo || 'manuale', operatore: r.operatore || '', data: r.created_at || ''
   };
 }
 
@@ -917,7 +925,7 @@ function DogAvatar({ size = 52, bg = COLORS.navy, iconColor = "#3ECB6E" }) {
   );
 }
 
-function AnagraficaCard({ c, onUpdate, onDelete, storico, storicoLezioni = [], onAddStorico, carnetTipi, acquistiCane, onRegistraAcquisto, puoModificare = true, mostraEconomico = true }) {
+function AnagraficaCard({ c, onUpdate, onDelete, storico, storicoLezioni = [], onAddStorico, carnetTipi, acquistiCane, movimentiPacchetto = [], onRegistraAcquisto, onInviaComunicazione, onGestisciIngressi, puoModificare = true, mostraEconomico = true }) {
   const [aperto, setAperto] = useState(false);
   const [modifica, setModifica] = useState(false);
   const [bozza, setBozza] = useState(c);
@@ -1110,7 +1118,7 @@ function AnagraficaCard({ c, onUpdate, onDelete, storico, storicoLezioni = [], o
                   className="w-full px-3 py-2.5 rounded-lg text-[12px] font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{ background: COLORS.green, fontFamily: "Oswald, sans-serif" }}
                 >
-                  Assegna pacchetto e invia comunicazione
+                  Assegna pacchetto
                 </button>
               </div>
             )}
@@ -1133,13 +1141,25 @@ function AnagraficaCard({ c, onUpdate, onDelete, storico, storicoLezioni = [], o
                       </div>
                       <div className="text-right shrink-0">
                         <div className="text-[11px] font-mono" style={{ color: a.statoPacchetto === "attivo" ? COLORS.green : COLORS.terracotta }}>{a.lezioniResidue}/{a.lezioniTotali} ingressi</div>
-                        {puoModificare && a.statoPacchetto === "documenti_ricevuti" && <button onClick={() => window.dispatchEvent(new CustomEvent('acs-attiva-pacchetto',{detail:{id:a.id}}))} className="mt-1 text-[10.5px] font-semibold underline" style={{color:COLORS.green}}>Approva e attiva</button>}
+                        {puoModificare && <div className="mt-1.5 flex flex-col items-end gap-1">
+                          <button onClick={() => onInviaComunicazione(a)} className="text-[10.5px] font-semibold underline" style={{color:COLORS.navy}}>📧 {a.emailInviataAt ? "Reinvia comunicazione" : "Invia comunicazione"}</button>
+                          {a.statoPacchetto === "attivo" && <button onClick={() => onGestisciIngressi(a)} className="text-[10.5px] font-semibold underline" style={{color:COLORS.terracotta}}>✏️ Gestisci ingressi</button>}
+                          {a.statoPacchetto === "documenti_ricevuti" && <button onClick={() => window.dispatchEvent(new CustomEvent('acs-attiva-pacchetto',{detail:{id:a.id}}))} className="text-[10.5px] font-semibold underline" style={{color:COLORS.green}}>Approva e attiva</button>}
+                        </div>}
                       </div>
                     </div>
                   );
                 })}
               </div>
             )}
+            {movimentiPacchetto.length > 0 && <div className="mt-3">
+              <div className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: COLORS.muted }}>Storico movimenti pacchetto</div>
+              <div className="space-y-1">
+                {movimentiPacchetto.slice(0,8).map((m) => <div key={m.id} className="text-[10.5px] rounded-md px-2 py-1.5" style={{background:'#FAFAFB',color:COLORS.muted}}>
+                  <span className="font-mono">{m.prima} → {m.dopo}</span> · {m.motivo || m.tipo}{m.operatore ? ` · ${m.operatore}` : ''}
+                </div>)}
+              </div>
+            </div>}
           </div>
           </>)}
 
@@ -1416,6 +1436,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
   const [formEvento, setFormEvento] = useState({ data: "", ora: "", tipo: "", luogo: "", postiTotali: "" });
   const [carnetTipi, setCarnetTipi] = useState([]);
   const [acquisti, setAcquisti] = useState([]);
+  const [movimentiPacchetto, setMovimentiPacchetto] = useState([]);
   const [nuovoCarnet, setNuovoCarnet] = useState(false);
   const [formCarnet, setFormCarnet] = useState({ nome: "", numeroLezioni: "", prezzo: "", descrizione: "" });
   const [quotaAssociativa, setQuotaAssociativa] = useState(50);
@@ -1506,20 +1527,22 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
 
       let acquistiMappati = [];
       if (admin) {
-        const [carnetRes, corsiRes, acquistiRes, impostazioniRes, iscrizioniRes] = await Promise.all([
+        const [carnetRes, corsiRes, acquistiRes, impostazioniRes, iscrizioniRes, movimentiRes] = await Promise.all([
           supabase.from("carnet").select("*").eq("attivo", true),
           supabase.from("corsi").select("*").eq("attivo", true),
           supabase.from("acquisti").select("*").order("data_acquisto", { ascending: false }),
           supabase.from("impostazioni").select("chiave,valore").eq("chiave", "quota_associativa").maybeSingle(),
           supabase.from("iscrizioni").select("*").order("created_at", { ascending: false }),
+          supabase.from("pacchetto_movimenti").select("*").order("created_at", { ascending: false }).limit(200),
         ]);
-        const adminResults = [carnetRes, corsiRes, acquistiRes, impostazioniRes, iscrizioniRes];
+        const adminResults = [carnetRes, corsiRes, acquistiRes, impostazioniRes, iscrizioniRes, movimentiRes];
         const erroreAdmin = adminResults.find((r) => r.error)?.error;
         if (erroreAdmin) throw erroreAdmin;
         acquistiMappati = (acquistiRes.data || []).map(mappaAcquisto);
         setAcquisti(acquistiMappati);
         setCarnetTipi((carnetRes.data || []).map(mappaCarnet));
         setIscrizioni(iscrizioniRes.data || []);
+        setMovimentiPacchetto((movimentiRes.data || []).map(mappaMovimentoPacchetto));
         const quota = impostazioniRes.data?.valore;
         const quotaNumero = typeof quota === "number" ? quota : Number(quota);
         if (Number.isFinite(quotaNumero)) setQuotaAssociativa(quotaNumero);
@@ -1527,6 +1550,7 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
         setAcquisti([]);
         setCarnetTipi([]);
         setIscrizioni([]);
+        setMovimentiPacchetto([]);
       }
 
       setAnagrafica((anagraficaRes.data || []).map(mappaCane).map((c) => {
@@ -1926,17 +1950,57 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
   async function registraAcquisto(cane, carnetId) {
     const tipo = carnetTipi.find((c) => c.id === carnetId);
     if (!tipo) return;
-    if (!window.confirm(`Assegnare il pacchetto "${tipo.nome}" a ${cane} e inviare la comunicazione al cliente?`)) return;
+    if (!window.confirm(`Assegnare il pacchetto "${tipo.nome}" a ${cane}? La comunicazione NON verrà inviata automaticamente.`)) return;
     try {
       const { data: risposta, error } = await supabase.rpc("acs_assegna_pacchetto", { p_cane_nome: cane, p_carnet_id: carnetId });
       if (error) throw error;
-      if (!risposta?.ok || !risposta?.acquisto_id) throw new Error(risposta?.errore || "Assegnazione non riuscita");
-      await inviaEmailPacchetto(risposta.acquisto_id);
-      registraLog(istruttoreLoggato.nome, "creazione", "Pacchetto", `${cane}: assegnato "${tipo.nome}" e inviata comunicazione`);
-      await caricaTuttoDopoLogin();
-      alert(`Pacchetto #${risposta.numero_pacchetto || ""} assegnato. Comunicazione inviata al cliente.`);
+      registraLog(istruttoreLoggato.nome, "creazione", "Pacchetto", `Pacchetto #${risposta?.numero_pacchetto || ''} assegnato a ${cane}`);
+      await caricaTuttoDopoLogin(istruttoreLoggato);
+      alert(`Pacchetto #${risposta?.numero_pacchetto || ''} assegnato. Nessuna email è stata inviata.`);
     } catch (err) {
       alert(err?.message || "Non è stato possibile assegnare il pacchetto.");
+    }
+  }
+
+  async function inviaComunicazionePacchetto(a) {
+    const tipo = carnetTipi.find((c) => c.id === a.carnetId);
+    const oggettoDefault = `ACS - Pacchetto #${a.numeroPacchetto}: adesione e pagamento`;
+    const messaggioDefault = `Ciao,
+
+dopo la lezione di prova ti è stato assegnato il pacchetto #${a.numeroPacchetto}: ${tipo?.nome || 'Pacchetto ACS'} (${a.lezioniTotali} ingressi).
+
+In allegato trovi il modulo personalizzato. Firma il modulo, effettua il bonifico e completa l'adesione tramite il link indicato nella comunicazione.
+
+Associazione Cani Salvataggio`;
+    const oggetto = window.prompt("Oggetto della mail", oggettoDefault);
+    if (oggetto === null) return;
+    const messaggio = window.prompt("Testo della mail (puoi modificarlo prima dell'invio)", messaggioDefault);
+    if (messaggio === null) return;
+    try {
+      await inviaEmailPacchetto(a.id, oggetto, messaggio);
+      registraLog(istruttoreLoggato.nome, "invio", "Pacchetto", `Comunicazione pacchetto #${a.numeroPacchetto || ''}`);
+      await caricaTuttoDopoLogin(istruttoreLoggato);
+      alert("Comunicazione inviata correttamente.");
+    } catch (err) {
+      alert(err?.message || "Invio comunicazione non riuscito.");
+    }
+  }
+
+  async function gestisciIngressiPacchetto(a) {
+    const valore = window.prompt(`Ingressi residui attuali: ${a.lezioniResidue}. Inserisci il nuovo numero di ingressi residui:`, String(a.lezioniResidue));
+    if (valore === null) return;
+    const nuovo = Number(valore);
+    if (!Number.isInteger(nuovo) || nuovo < 0) { alert("Inserisci un numero intero maggiore o uguale a zero."); return; }
+    const motivo = window.prompt("Motivo della modifica (obbligatorio):", "Correzione manuale Admin");
+    if (motivo === null || !motivo.trim()) { alert("Il motivo è obbligatorio."); return; }
+    try {
+      const { data, error } = await supabase.rpc("acs_modifica_ingressi_pacchetto", { p_acquisto_id: a.id, p_nuove_lezioni_residue: nuovo, p_motivo: motivo.trim() });
+      if (error) throw error;
+      registraLog(istruttoreLoggato.nome, "modifica", "Pacchetto", `Pacchetto #${a.numeroPacchetto || ''}: ${a.lezioniResidue} → ${nuovo} ingressi. ${motivo.trim()}`);
+      await caricaTuttoDopoLogin(istruttoreLoggato);
+      alert(`Ingressi aggiornati: ${data?.lezioni_prima ?? a.lezioniResidue} → ${data?.lezioni_dopo ?? nuovo}.`);
+    } catch (err) {
+      alert(err?.message || "Non è stato possibile modificare gli ingressi.");
     }
   }
 
@@ -2209,7 +2273,10 @@ function IstruttoreView({ prenotazioni, setPrenotazioni, eventi, setEventi, anag
                   onAddStorico={(voce) => aggiungiStorico(c.cane, voce)}
                   carnetTipi={carnetTipi}
                   acquistiCane={acquisti.filter((a) => a.cane === c.cane).sort((x, y) => (y.data || "").localeCompare(x.data || ""))}
+                  movimentiPacchetto={movimentiPacchetto.filter((m) => acquisti.filter((a) => a.cane === c.cane).some((a) => a.id === m.acquistoId))}
                   onRegistraAcquisto={(carnetId) => registraAcquisto(c.cane, carnetId)}
+                  onInviaComunicazione={inviaComunicazionePacchetto}
+                  onGestisciIngressi={gestisciIngressiPacchetto}
                   puoModificare={puoGestireAnagrafica}
                   mostraEconomico={isAdmin}
                 />

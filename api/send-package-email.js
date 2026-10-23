@@ -162,6 +162,8 @@ export default async function handler(req, res) {
 
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
     const acquistoId = String(body.acquistoId || '');
+    const subjectOverride = String(body.subject || '').trim();
+    const messageOverride = String(body.message || '').trim();
     if (!acquistoId) return out(res, 400, { ok:false, errore:'Pacchetto mancante' });
 
     const { data:p, error:pe } = await admin.from('acquisti')
@@ -187,16 +189,17 @@ export default async function handler(req, res) {
     const link = `${origin}/?pacchetto=${encodeURIComponent(p.adesione_token)}`;
     const prezzo = euro(tipo.prezzo);
     const causale = `Pacchetto ${p.numero_pacchetto} - ${p.cliente_nome || ''} - ${p.cane_nome || ''}`.trim();
-    const subject = `ACS - Pacchetto #${p.numero_pacchetto}: adesione e pagamento`;
+    const subject = subjectOverride || `ACS - Pacchetto #${p.numero_pacchetto}: adesione e pagamento`;
+    const introText = messageOverride || `Ciao ${p.cliente_nome || ''},\n\ndopo la lezione di prova ti è stato assegnato il pacchetto #${p.numero_pacchetto}: ${tipo.nome} (${p.lezioni_totali} ingressi).`;
+    const introHtml = htmlEscape(introText).replace(/\n/g, '<br>');
 
     const pdfBase64 = await generaModuloPersonalizzato({ origin, pacchetto:p, tipo, cane });
     const logoBase64 = await caricaLogo(origin);
     const logoSrc = logoBase64 ? 'cid:acslogo' : `${origin}/icon-192.png`;
 
     const testo = [
-      `Ciao ${p.cliente_nome || ''},`,
+      introText,
       '',
-      `dopo la lezione di prova ti è stato assegnato il pacchetto #${p.numero_pacchetto}: ${tipo.nome} (${p.lezioni_totali} ingressi).`,
       `Importo: ${prezzo}.`,
       '',
       `Pagamento tramite bonifico - IBAN: ${IBAN}`,
@@ -213,8 +216,7 @@ export default async function handler(req, res) {
 
     const htmlBody = `
       <div style="font-family:Arial,sans-serif;color:#172033;line-height:1.55;max-width:640px;margin:auto">
-        <p>Ciao <strong>${htmlEscape(p.cliente_nome || '')}</strong>,</p>
-        <p>dopo la lezione di prova ti è stato assegnato:</p>
+        <p>${introHtml}</p>
         <div style="border:1px solid #dfe5ea;border-radius:12px;padding:16px;background:#f7f9fb;margin:16px 0">
           <div style="font-size:18px;font-weight:700;color:#173650">Pacchetto #${htmlEscape(p.numero_pacchetto)}</div>
           <div style="font-size:16px;font-weight:700;margin-top:4px">${htmlEscape(tipo.nome)}</div>
